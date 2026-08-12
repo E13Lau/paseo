@@ -57,6 +57,9 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/docker.md](docs/docker.md)                                   | Running the daemon and bundled web UI in Docker, volumes, agent images, security                                               |
 | [docs/release.md](docs/release.md)                                 | Release playbook, draft releases, completion checklist                                                                         |
 | [docs/terminal-activity.md](docs/terminal-activity.md)             | Terminal activity indicators — source-agnostic tracker, agent hook reporting, adding a new hook provider                       |
+| [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)       | Issue tracker commands and fork repository targeting                                                                           |
+| [docs/agents/triage-labels.md](docs/agents/triage-labels.md)       | Canonical triage roles and GitHub label mapping                                                                                |
+| [docs/agents/domain.md](docs/agents/domain.md)                     | Domain documentation layout and consumer rules                                                                                 |
 | [SECURITY.md](SECURITY.md)                                         | Relay threat model, E2E encryption, DNS rebinding, agent auth                                                                  |
 | [public-docs/hub/security.md](public-docs/hub/security.md)         | Public Hub guide — trust boundaries, untrusted triggers, provider controls, and output authority                               |
 
@@ -83,6 +86,20 @@ Do not:
 - Restate something you already said, in different words, for emphasis.
 - Hedge with "generally", "typically", or "you may want to" when the answer is "do this".
 - Clear your throat: "It's worth noting that", "In order to", "This section covers".
+
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked in the `E13Lau/paseo` GitHub repository. External pull requests are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the canonical `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` labels. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This repository uses a single-context domain documentation layout. See `docs/agents/domain.md`.
 
 ## Quick start
 

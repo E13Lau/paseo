@@ -1,4 +1,6 @@
-# Development workflow
+# Fork repository execution rules
+
+This document defines the repository-level execution rules for the `E13Lau/paseo` fork. Agents and contributors working in this checkout must follow these rules. They take precedence over upstream Paseo's default branch and pull request workflow when work targets this fork.
 
 This fork uses trunk-based development. `main` is the integration branch and the default destination for completed changes.
 

@@ -60,7 +60,7 @@ At the start of non-trivial work, list `docs/` and skim anything relevant to the
 | [docs/agents/issue-tracker.md](docs/agents/issue-tracker.md)               | Issue tracker commands and fork repository targeting                                                                           |
 | [docs/agents/triage-labels.md](docs/agents/triage-labels.md)               | Canonical triage roles and GitHub label mapping                                                                                |
 | [docs/agents/domain.md](docs/agents/domain.md)                             | Domain documentation layout and consumer rules                                                                                 |
-| [docs/agents/development-workflow.md](docs/agents/development-workflow.md) | Fork trunk development and upstream synchronization                                                                            |
+| [docs/agents/development-workflow.md](docs/agents/development-workflow.md) | Fork repository execution rules, trunk development, and upstream synchronization                                               |
 | [SECURITY.md](SECURITY.md)                                                 | Relay threat model, E2E encryption, DNS rebinding, agent auth                                                                  |
 | [public-docs/hub/security.md](public-docs/hub/security.md)                 | Public Hub guide — trust boundaries, untrusted triggers, provider controls, and output authority                               |
 
@@ -104,7 +104,7 @@ This repository uses a single-context domain documentation layout. See `docs/age
 
 ### Development workflow
 
-This fork uses trunk-based development on `main`. Commit completed changes directly to `main` and push them to `origin/main`; do not create a feature branch or pull request unless the user asks. See `docs/agents/development-workflow.md`.
+The repository-level execution rules for this fork are defined in `docs/agents/development-workflow.md`. This fork uses trunk-based development on `main`: commit completed changes directly to `main` and push them to `origin/main`; do not create a feature branch or pull request unless the user asks.
 
 ## Quick start
 

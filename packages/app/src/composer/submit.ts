@@ -8,6 +8,8 @@ export interface AgentInputSubmitActionInput<TAttachment> {
   hasExternalContent?: boolean;
   allowEmptySubmit?: boolean;
   submitBehavior?: "clear" | "preserve-and-lock";
+  /** Submit different content without changing or completing the current draft lifecycle. */
+  preserveComposer?: boolean;
   forceSend?: boolean;
   isAgentRunning: boolean;
   canSubmit: boolean;
@@ -17,7 +19,7 @@ export interface AgentInputSubmitActionInput<TAttachment> {
   setUserInput: (text: string) => void;
   setAttachments: (attachments: TAttachment[]) => void;
   setSendError: (message: string | null) => void;
-  setIsProcessing: (isProcessing: boolean) => void;
+  setIsProcessing?: (isProcessing: boolean) => void;
   onSubmitError?: (error: unknown) => void;
   failedToSendMessage?: string;
 }
@@ -27,7 +29,8 @@ export async function submitAgentInput<TAttachment>(
 ): Promise<AgentInputSubmitResult> {
   const trimmedMessage = input.message.trim();
   const attachments = input.attachments;
-  const shouldClearOnSubmit = input.submitBehavior !== "preserve-and-lock";
+  const shouldClearOnSubmit =
+    input.submitBehavior !== "preserve-and-lock" && input.preserveComposer !== true;
 
   if (
     !trimmedMessage &&
@@ -57,12 +60,14 @@ export async function submitAgentInput<TAttachment>(
     input.setAttachments([]);
   }
   input.setSendError(null);
-  input.setIsProcessing(true);
+  input.setIsProcessing?.(true);
 
   try {
     await input.submitMessage({ message: trimmedMessage, attachments });
-    input.clearDraft("sent");
-    input.setIsProcessing(false);
+    if (!input.preserveComposer) {
+      input.clearDraft("sent");
+    }
+    input.setIsProcessing?.(false);
     return "submitted";
   } catch (error) {
     input.onSubmitError?.(error);
@@ -75,7 +80,7 @@ export async function submitAgentInput<TAttachment>(
         ? error.message
         : (input.failedToSendMessage ?? i18n.t("composer.errors.failedToSend")),
     );
-    input.setIsProcessing(false);
+    input.setIsProcessing?.(false);
     return "failed";
   }
 }

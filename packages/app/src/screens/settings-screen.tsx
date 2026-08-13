@@ -37,6 +37,7 @@ import {
   Code2,
   Smartphone,
   Sparkles,
+  MessageSquareText,
 } from "lucide-react-native";
 import { DropdownTrigger } from "@/components/ui/dropdown-trigger";
 import { ComboboxTrigger } from "@/components/ui/combobox-trigger";
@@ -129,6 +130,7 @@ import {
   navigateToLastWorkspace,
   useLastWorkspaceSelection,
 } from "@/stores/navigation-active-workspace-store";
+import { SavedPromptsPage } from "@/saved-prompts/settings/page";
 
 // ---------------------------------------------------------------------------
 // View model
@@ -151,6 +153,11 @@ const SIDEBAR_SECTION_ITEMS: SidebarSectionItem[] = [
   { id: "general", labelKey: "settings.sections.general", icon: Settings },
   { id: "appearance", labelKey: "settings.sections.appearance", icon: Palette },
   { id: "editor", labelKey: "settings.sections.editor", icon: Code2 },
+  {
+    id: "saved-prompts",
+    labelKey: "settings.sections.savedPrompts",
+    icon: MessageSquareText,
+  },
   { id: "shortcuts", labelKey: "settings.sections.shortcuts", icon: Keyboard, desktopOnly: true },
   {
     id: "integrations",
@@ -1436,6 +1443,8 @@ export default function SettingsScreen({ view, openAddHostIntent = null }: Setti
           return <AppearanceSection />;
         case "editor":
           return <EditorSection />;
+        case "saved-prompts":
+          return <SavedPromptsPage />;
         case "shortcuts":
           return isDesktopApp ? <KeyboardShortcutsSection /> : null;
         case "integrations":

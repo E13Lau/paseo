@@ -11,6 +11,7 @@ import {
   loadSettingsFromStorage,
   parseClampedFontSize,
   parseTerminalScrollbackLines,
+  resetAppSettings,
   saveAppSettings,
   type SettingsDeps,
 } from "./storage";
@@ -76,6 +77,39 @@ describe("loadAppSettingsFromStorage", () => {
     const result = await loadAppSettingsFromStorage(deps);
 
     expect(result.chatOutlineEnabled).toBe(true);
+  });
+
+  it("defaults saved prompts to an empty list with automatic sending disabled", async () => {
+    const deps = makeDeps();
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.savedPrompts).toEqual([]);
+    expect(result.savedPromptAutomaticSending).toBe(false);
+  });
+
+  it("loads valid saved prompts in order and normalizes malformed storage", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          savedPrompts: [
+            { id: " first ", name: " Continue ", body: "\ncontinue\n" },
+            { id: "second", name: "Review", body: "review" },
+            { id: "duplicate", name: "Continue", body: "duplicate" },
+            { id: "blank", name: "Blank", body: "   " },
+          ],
+          savedPromptAutomaticSending: true,
+        }),
+      }),
+    });
+
+    const result = await loadAppSettingsFromStorage(deps);
+
+    expect(result.savedPrompts).toEqual([
+      { id: "first", name: "Continue", body: "\ncontinue\n" },
+      { id: "second", name: "Review", body: "review" },
+    ]);
+    expect(result.savedPromptAutomaticSending).toBe(true);
   });
 
   it("loads a disabled chat outline preference", async () => {
@@ -303,6 +337,28 @@ describe("loadSettingsFromStorage", () => {
 });
 
 describe("saveAppSettings", () => {
+  it("normalizes saved prompts before persistence", async () => {
+    const deps = makeDeps();
+    const queryClient = new QueryClient();
+
+    await saveAppSettings({
+      queryClient,
+      updates: {
+        savedPrompts: [
+          { id: "one", name: " One ", body: "\nbody\n" },
+          { id: "two", name: "One", body: "duplicate" },
+        ],
+        savedPromptAutomaticSending: true,
+      },
+      deps,
+    });
+
+    expect(JSON.parse(deps.storage.entries.get(APP_SETTINGS_KEY) ?? "null")).toMatchObject({
+      savedPrompts: [{ id: "one", name: "One", body: "\nbody\n" }],
+      savedPromptAutomaticSending: true,
+    });
+  });
+
   it("saves terminal scrollback through app settings persistence", async () => {
     const deps = makeDeps({
       storage: createInMemoryKeyValueStorage({
@@ -344,6 +400,33 @@ describe("saveAppSettings", () => {
       theme: "light",
       toolCallDetailLevel: "overview",
     });
+  });
+});
+
+describe("resetAppSettings", () => {
+  it("clears saved prompts and disables automatic sending", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          ...DEFAULT_CLIENT_SETTINGS,
+          savedPrompts: [{ id: "review", name: "Review", body: "Review this" }],
+          savedPromptAutomaticSending: true,
+        }),
+      }),
+    });
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, {
+      ...DEFAULT_CLIENT_SETTINGS,
+      savedPrompts: [{ id: "review", name: "Review", body: "Review this" }],
+      savedPromptAutomaticSending: true,
+    });
+
+    await resetAppSettings({ queryClient, deps });
+
+    expect(queryClient.getQueryData(APP_SETTINGS_QUERY_KEY)).toEqual(DEFAULT_CLIENT_SETTINGS);
+    expect(deps.storage.entries.get(APP_SETTINGS_KEY)).toBe(
+      JSON.stringify(DEFAULT_CLIENT_SETTINGS),
+    );
   });
 });
 

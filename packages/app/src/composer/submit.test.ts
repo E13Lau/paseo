@@ -141,6 +141,38 @@ describe("submitAgentInput", () => {
     expect(clearDraft).not.toHaveBeenCalled();
   });
 
+  it("queues an independent message without mutating the current composer", async () => {
+    const queueMessage = vi.fn();
+    const submitMessage = vi.fn();
+    const clearDraft = vi.fn();
+    const setUserInput = vi.fn();
+    const setAttachments = vi.fn();
+    const setSendError = vi.fn();
+    const setIsProcessing = vi.fn();
+
+    await expect(
+      submitAgentInput({
+        message: "  independent  ",
+        attachments: [],
+        preserveComposer: true,
+        isAgentRunning: true,
+        canSubmit: true,
+        queueMessage,
+        submitMessage,
+        clearDraft,
+        setUserInput,
+        setAttachments,
+        setSendError,
+        setIsProcessing,
+      }),
+    ).resolves.toBe("queued");
+
+    expect(queueMessage).toHaveBeenCalledWith({ message: "independent", attachments: [] });
+    expect(setUserInput).not.toHaveBeenCalled();
+    expect(setAttachments).not.toHaveBeenCalled();
+    expect(clearDraft).not.toHaveBeenCalled();
+  });
+
   it("restores the composer when submit fails", async () => {
     const submitError = new Error("No host selected");
     const queueMessage = vi.fn();
@@ -182,6 +214,39 @@ describe("submitAgentInput", () => {
     expect(setIsProcessing).toHaveBeenNthCalledWith(1, true);
     expect(setIsProcessing).toHaveBeenNthCalledWith(2, false);
     expect(clearDraft).not.toHaveBeenCalled();
+  });
+
+  it("keeps the current composer untouched when an independent submit fails", async () => {
+    const submitError = new Error("Disconnected");
+    const setUserInput = vi.fn();
+    const setAttachments = vi.fn();
+    const setSendError = vi.fn();
+    const setIsProcessing = vi.fn();
+    const clearDraft = vi.fn();
+
+    await expect(
+      submitAgentInput({
+        message: "  /ordinary  ",
+        attachments: [],
+        preserveComposer: true,
+        isAgentRunning: false,
+        canSubmit: true,
+        queueMessage: vi.fn(),
+        submitMessage: async () => {
+          throw submitError;
+        },
+        clearDraft,
+        setUserInput,
+        setAttachments,
+        setSendError,
+        setIsProcessing,
+      }),
+    ).resolves.toBe("failed");
+
+    expect(setUserInput).not.toHaveBeenCalled();
+    expect(setAttachments).not.toHaveBeenCalled();
+    expect(clearDraft).not.toHaveBeenCalled();
+    expect(setSendError).toHaveBeenLastCalledWith("Disconnected");
   });
 
   it("submits when empty submit is explicitly allowed", async () => {

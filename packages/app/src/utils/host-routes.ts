@@ -493,6 +493,7 @@ export const SETTINGS_SECTION_SLUGS = [
   "general",
   "appearance",
   "editor",
+  "saved-prompts",
   "shortcuts",
   "integrations",
   "notifications",

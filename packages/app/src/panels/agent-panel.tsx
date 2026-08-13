@@ -1645,6 +1645,7 @@ function ActiveAgentComposer({
         onMessageSent={onMessageSent}
         onClientSlashCommand={handleClientSlashCommand}
         isCompactLayout={isCompactComposerLayout}
+        savedPromptsEnabled
       />
     </ReanimatedAnimated.View>
   );

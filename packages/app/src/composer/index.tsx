@@ -135,6 +135,12 @@ import {
   resolveWorkspaceFileDrop,
   type WorkspaceFileDragPayload,
 } from "@/attachments/workspace-file-drag";
+import { SavedPromptComposerRow } from "@/saved-prompts/composer-row";
+import {
+  applySavedPromptToSelection,
+  type SavedPrompt,
+  type TextSelection,
+} from "@/saved-prompts/model";
 
 const composerImageAttachmentPersister: Pick<
   AttachmentPersister,
@@ -185,6 +191,31 @@ function resolveIsDesktopWebBreakpoint(isMobile: boolean): boolean {
 
 function resolveCompactLayout(override: boolean | undefined, formFactor: boolean): boolean {
   return override ?? formFactor;
+}
+
+function resolveCurrentTextSelection(
+  input: MessageInputRef | null,
+  fallback: TextSelection,
+): TextSelection {
+  if (!isWeb) {
+    return fallback;
+  }
+  const element = input?.getNativeElement?.();
+  if (!element) {
+    return fallback;
+  }
+  return {
+    start: element.selectionStart,
+    end: element.selectionEnd,
+  };
+}
+
+function resolveIsMessageInputFocused(input: MessageInputRef | null, fallback: boolean): boolean {
+  if (!isWeb) {
+    return fallback;
+  }
+  const element = input?.getNativeElement?.();
+  return element ? document.activeElement === element || fallback : fallback;
 }
 
 function resolveMessagePlaceholder(
@@ -887,6 +918,22 @@ interface ComposerProps {
   submitLabel?: string;
   /** Overrides the mode's default placeholder, for text only the caller can build. */
   placeholder?: string;
+  /** Shows client-owned Saved prompts for an existing editable agent session. */
+  savedPromptsEnabled?: boolean;
+}
+
+interface SendMessageWithContentOptions {
+  forceSend?: boolean;
+  preserveComposer?: boolean;
+}
+
+interface QueueMessageOptions {
+  preserveComposer?: boolean;
+}
+
+interface PreparedSavedPromptSelection {
+  selection: TextSelection;
+  wasInputFocused: boolean;
 }
 
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
@@ -1078,6 +1125,7 @@ export function Composer({
   readOnly = false,
   submitLabel,
   placeholder,
+  savedPromptsEnabled = false,
 }: ComposerProps) {
   const mode = resolveComposerInputMode(inputMode);
   const { t } = useTranslation();
@@ -1148,8 +1196,10 @@ export function Composer({
     onPullRequestDetected: onGithubPrDetected,
     onPullRequestAdded: onGithubPrAutoAttach,
   });
-  const [cursorIndex, setCursorIndex] = useState(0);
+  const [textSelection, setTextSelection] = useState<TextSelection>({ start: 0, end: 0 });
+  const cursorIndex = textSelection.start;
   const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingSavedPromptId, setPendingSavedPromptId] = useState<string | null>(null);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [isMessageInputFocused, setIsMessageInputFocused] = useState(false);
@@ -1158,6 +1208,8 @@ export function Composer({
   const [lightboxMetadata, setLightboxMetadata] = useState<AttachmentMetadata | null>(null);
   const attachButtonRef = useRef<View | null>(null);
   const messageInputRef = useRef<MessageInputRef>(null);
+  const wasMessageInputRecentlyFocusedRef = useRef(false);
+  const preparedSavedPromptSelectionRef = useRef<PreparedSavedPromptSelection | null>(null);
   const isComposerLocked = resolveIsComposerLocked(submitBehavior, isSubmitLoading);
   const keyboardHandlerIdRef = useRef(
     `message-input:${serverId}:${agentId}:${Math.random().toString(36).slice(2)}`,
@@ -1214,16 +1266,24 @@ export function Composer({
   const autocompleteOnKeyPressRef = useRef(autocomplete.onKeyPress);
   autocompleteOnKeyPressRef.current = autocomplete.onKeyPress;
 
-  // Clear send error when user edits the input
   useEffect(() => {
-    if (sendError && userInput) {
-      setSendError(null);
-    }
-  }, [userInput, sendError]);
-
-  useEffect(() => {
-    setCursorIndex((current) => Math.min(current, userInput.length));
+    setTextSelection((current) => {
+      const start = Math.min(current.start, userInput.length);
+      const end = Math.min(current.end, userInput.length);
+      if (start === current.start && end === current.end) {
+        return current;
+      }
+      return { start, end };
+    });
   }, [userInput.length]);
+
+  const handleUserInputChange = useCallback(
+    (text: string) => {
+      setSendError(null);
+      setUserInput(text);
+    },
+    [setUserInput],
+  );
 
   const { pickImages } = useImageAttachmentPicker();
   const { pickFiles } = useFilePicker();
@@ -1347,7 +1407,11 @@ export function Composer({
   );
 
   const queueMessage = useCallback(
-    (queuedMessage: string, queuedAttachments: ComposerAttachment[]) => {
+    (
+      queuedMessage: string,
+      queuedAttachments: ComposerAttachment[],
+      options: QueueMessageOptions = {},
+    ) => {
       const result = queueComposerMessage({
         agentId,
         text: queuedMessage,
@@ -1355,6 +1419,7 @@ export function Composer({
         queue: queueWriter,
       });
       if (!result.queued) return;
+      if (options.preserveComposer) return;
 
       setUserInput("");
       setSelectedAttachments([]);
@@ -1375,24 +1440,27 @@ export function Composer({
     async (
       outgoingMessage: string,
       outgoingAttachments: ComposerAttachment[],
-      forceSend?: boolean,
+      options: SendMessageWithContentOptions = {},
     ) => {
       const result = await submitAgentInput({
         message: outgoingMessage,
         attachments: outgoingAttachments,
         hasExternalContent,
         allowEmptySubmit,
-        forceSend,
+        forceSend: options.forceSend,
+        preserveComposer: options.preserveComposer,
         submitBehavior,
         isAgentRunning,
         // Parent-managed submits are still valid submit paths even when the
         // transport is disconnected, because the parent decides the failure mode.
         canSubmit: Boolean(sendAgentMessageRef.current || onSubmitMessageRef.current),
         queueMessage: ({ message: queuedText, attachments: queuedAttachments }) => {
-          queueMessage(queuedText, queuedAttachments);
+          queueMessage(queuedText, queuedAttachments, {
+            preserveComposer: options.preserveComposer,
+          });
         },
         submitMessage: async ({ message: submitText, attachments: submitAttachments }) => {
-          if (submitBehavior !== "preserve-and-lock") {
+          if (submitBehavior !== "preserve-and-lock" && !options.preserveComposer) {
             beginSubmit(submitAttachments);
           }
           await submitMessage(submitText, submitAttachments);
@@ -1403,16 +1471,19 @@ export function Composer({
           setSelectedAttachments(composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments));
         },
         setSendError,
-        setIsProcessing,
+        setIsProcessing: options.preserveComposer ? undefined : setIsProcessing,
         onSubmitError: (error) => {
           console.error("[AgentInput] Failed to send message:", error);
         },
         failedToSendMessage: t("composer.errors.failedToSend"),
       });
-      completeSubmit({
-        result,
-        outgoingAttachments,
-      });
+      if (!options.preserveComposer) {
+        completeSubmit({
+          result,
+          outgoingAttachments,
+        });
+      }
+      return result;
     },
     [
       allowEmptySubmit,
@@ -1444,7 +1515,9 @@ export function Composer({
       if (blurOnSubmit) {
         messageInputRef.current?.blur();
       }
-      void sendMessageWithContent(payload.text, outgoingAttachments, payload.forceSend);
+      void sendMessageWithContent(payload.text, outgoingAttachments, {
+        forceSend: payload.forceSend,
+      });
     },
     [
       attachments,
@@ -1981,14 +2054,24 @@ export function Composer({
   }, []);
 
   const handleSelectionChange = useCallback((selection: { start: number; end: number }) => {
-    setCursorIndex(selection.start);
+    setTextSelection(selection);
   }, []);
 
   const handleFocusChange = useCallback(
     (focused: boolean) => {
       setIsMessageInputFocused(focused);
       if (focused) {
+        wasMessageInputRecentlyFocusedRef.current = true;
         onAttentionInputFocus?.();
+      } else if (isWeb) {
+        requestAnimationFrame(() => {
+          wasMessageInputRecentlyFocusedRef.current = resolveIsMessageInputFocused(
+            messageInputRef.current,
+            false,
+          );
+        });
+      } else {
+        wasMessageInputRecentlyFocusedRef.current = false;
       }
     },
     [onAttentionInputFocus],
@@ -2076,6 +2159,100 @@ export function Composer({
   const isSubmitLoadingVisible = isProcessing || isSubmitLoading || isUploadingFile;
   const isSubmitDisabled =
     isSubmitLoadingVisible || (waitForGithubAutoAttachOnSubmit && githubAutoAttach.isResolving);
+  // Independent auto-send only needs a live agent session. Pending state is per
+  // selected chip (`pendingSavedPromptId`), not global submit loading.
+  const canAutomaticallySendSavedPrompt = isConnected && hasAgent && !readOnly;
+
+  const handleSavedPromptPressIn = useCallback(() => {
+    preparedSavedPromptSelectionRef.current = {
+      selection: resolveCurrentTextSelection(messageInputRef.current, textSelection),
+      wasInputFocused: resolveIsMessageInputFocused(
+        messageInputRef.current,
+        wasMessageInputRecentlyFocusedRef.current,
+      ),
+    };
+  }, [textSelection]);
+
+  const handleSavedPromptSelect = useCallback(
+    (prompt: SavedPrompt) => {
+      const preparedSelection = preparedSavedPromptSelectionRef.current;
+      preparedSavedPromptSelectionRef.current = null;
+      if (!appSettings.savedPromptAutomaticSending) {
+        const result = applySavedPromptToSelection({
+          text: userInput,
+          selection:
+            preparedSelection?.selection ??
+            resolveCurrentTextSelection(messageInputRef.current, textSelection),
+          body: prompt.body,
+        });
+        setSendError(null);
+        setUserInput(result.text);
+        setTextSelection(result.selection);
+        messageInputRef.current?.focus();
+        if (isWeb) {
+          requestAnimationFrame(() => {
+            messageInputRef.current?.focus();
+            messageInputRef.current?.setSelection(result.selection);
+          });
+        }
+        return;
+      }
+
+      if (!canAutomaticallySendSavedPrompt) return;
+
+      if (preparedSelection?.wasInputFocused) {
+        messageInputRef.current?.focus();
+        if (isWeb) {
+          requestAnimationFrame(() => {
+            messageInputRef.current?.focus();
+            messageInputRef.current?.setSelection(preparedSelection.selection);
+          });
+        }
+      }
+
+      setPendingSavedPromptId(prompt.id);
+      void sendMessageWithContent(prompt.body, [], {
+        forceSend: appSettings.sendBehavior === "interrupt",
+        preserveComposer: true,
+      }).finally(() => {
+        setPendingSavedPromptId((current) => (current === prompt.id ? null : current));
+      });
+    },
+    [
+      appSettings.savedPromptAutomaticSending,
+      appSettings.sendBehavior,
+      canAutomaticallySendSavedPrompt,
+      sendMessageWithContent,
+      setUserInput,
+      textSelection,
+      userInput,
+    ],
+  );
+
+  const savedPromptRow = useMemo(
+    () =>
+      savedPromptsEnabled && inputMode === "chat" && !readOnly ? (
+        <SavedPromptComposerRow
+          prompts={appSettings.savedPrompts}
+          automaticSending={appSettings.savedPromptAutomaticSending}
+          canAutomaticSend={canAutomaticallySendSavedPrompt}
+          pendingPromptId={pendingSavedPromptId}
+          onPrepareSelect={handleSavedPromptPressIn}
+          onSelect={handleSavedPromptSelect}
+        />
+      ) : null,
+    [
+      appSettings.savedPromptAutomaticSending,
+      appSettings.savedPrompts,
+      canAutomaticallySendSavedPrompt,
+      handleSavedPromptPressIn,
+      handleSavedPromptSelect,
+      inputMode,
+      pendingSavedPromptId,
+      readOnly,
+      savedPromptsEnabled,
+    ],
+  );
 
   // Disable drops while submitting/uploading: the submit path clears and restores attachments,
   // so a drop in that window would be lost or land on a locked draft. `disabled` hides the
@@ -2127,7 +2304,7 @@ export function Composer({
               <StableMessageInput
                 ref={messageInputRef}
                 value={userInput}
-                onChangeText={setUserInput}
+                onChangeText={handleUserInputChange}
                 onSubmit={handleSubmit}
                 hasExternalContent={hasExternalContent}
                 allowEmptySubmit={allowEmptySubmit}
@@ -2161,9 +2338,11 @@ export function Composer({
                 onSubmitLoadingPress={submitLoadingPressHandler}
                 onKeyPress={handleCommandKeyPress}
                 onSelectionChange={handleSelectionChange}
+                selection={isWeb ? undefined : textSelection}
                 onFocusChange={handleFocusChange}
                 onHeightChange={onComposerHeightChange}
                 inputWrapperStyle={inputWrapperStyle}
+                savedPromptSlot={savedPromptRow}
                 attachmentSlot={attachmentTray}
                 inputMode={inputMode}
                 readOnly={readOnly}

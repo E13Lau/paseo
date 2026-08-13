@@ -133,7 +133,7 @@ test.describe("provider usage tooltip", () => {
     }
   });
 
-  test("shows the Usage control and Grok-shaped plan usage when context window usage is unknown", async ({
+  test("shows a 0% context ring and Grok-shaped plan usage when context window usage is unavailable", async ({
     page,
   }) => {
     test.setTimeout(180_000);
@@ -146,7 +146,7 @@ test.describe("provider usage tooltip", () => {
     const session = await openMockAgent(page);
     try {
       const usageControl = page.getByTestId("context-window-meter");
-      await expect(usageControl).toHaveAttribute("aria-label", "Usage");
+      await expect(usageControl).toHaveAttribute("aria-label", "Context window 0% used");
 
       await usageControl.hover();
       await usageFixture.waitForRequestCount(1);
@@ -154,7 +154,7 @@ test.describe("provider usage tooltip", () => {
       await expect(page.getByText("Context window", { exact: true })).toBeVisible({
         timeout: 10_000,
       });
-      await expect(page.getByText("Unknown", { exact: true })).toBeVisible();
+      await expect(page.getByText("0% used", { exact: true })).toBeVisible();
       await expect(page.getByText("Grok", { exact: true })).toBeVisible();
       await expect(page.getByText("Monthly credits")).toBeVisible();
     } finally {
@@ -200,7 +200,7 @@ test.describe("provider usage tooltip", () => {
     }
   });
 
-  test("shows No usage data when neither context window usage nor plan usage exists", async ({
+  test("shows a 0% context ring when neither context occupancy nor plan usage exists", async ({
     page,
   }) => {
     test.setTimeout(180_000);
@@ -216,8 +216,11 @@ test.describe("provider usage tooltip", () => {
       await usageControl.hover();
       await usageFixture.waitForRequestCount(1);
 
-      await expect(page.getByText("No usage data")).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText("Context window", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Context window", { exact: true })).toBeVisible({
+        timeout: 10_000,
+      });
+      await expect(page.getByText("0% used", { exact: true })).toBeVisible();
+      await expect(page.getByText("No usage data")).toHaveCount(0);
     } finally {
       await session.cleanup();
     }
@@ -246,7 +249,7 @@ test.describe("provider usage tooltip", () => {
       await expect(page.getByText("Context window", { exact: true })).toBeVisible({
         timeout: 10_000,
       });
-      await expect(page.getByText("Unknown", { exact: true })).toBeVisible();
+      await expect(page.getByText("0% used", { exact: true })).toBeVisible();
       await expect(page.getByText("Update the host to see provider usage")).toBeVisible();
     } finally {
       await session.cleanup();

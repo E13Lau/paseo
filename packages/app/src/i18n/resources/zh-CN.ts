@@ -1689,6 +1689,8 @@ export const zhCN: TranslationResources = {
     tokens: "{{used}} / {{max}} tokens",
     sessionCost: "会话费用 {{cost}}",
     accessibility: "上下文窗口已使用 {{percentage}}%",
+    usageAccessibility: "用量",
+    unknown: "未知",
   },
   review: {
     comment: {

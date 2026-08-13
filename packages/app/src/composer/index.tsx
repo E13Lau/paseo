@@ -291,13 +291,8 @@ function renderContextWindowMeter(
   showPercentage: boolean,
   serverId: string,
   provider: string | null,
-  pending: boolean,
   glyphSize: number,
-): ReactElement | null {
-  const hasData = contextWindowMaxTokens !== null && contextWindowUsedTokens !== null;
-  if (!hasData && !pending) {
-    return null;
-  }
+): ReactElement {
   return (
     <ContextWindowMeter
       maxTokens={contextWindowMaxTokens}
@@ -306,7 +301,6 @@ function renderContextWindowMeter(
       showPercentage={showPercentage}
       serverId={serverId}
       provider={provider}
-      pending={pending}
       glyphSize={glyphSize}
     />
   );
@@ -1884,7 +1878,6 @@ export function Composer({
     agentState.contextWindowUsedTokens,
   );
 
-  const contextWindowPending = agentState.status === "initializing" || isAgentRunning;
   const contextWindowMeterGlyphSize = isCompactLayout ? ICON_SIZE.md : buttonIconSize;
 
   const contextWindowMeter = useMemo(
@@ -1896,7 +1889,6 @@ export function Composer({
         false,
         serverId,
         agentState.provider,
-        contextWindowPending,
         contextWindowMeterGlyphSize,
       ),
     [
@@ -1905,7 +1897,6 @@ export function Composer({
       agentState.totalCostUsd,
       serverId,
       agentState.provider,
-      contextWindowPending,
       contextWindowMeterGlyphSize,
     ],
   );

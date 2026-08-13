@@ -1743,6 +1743,8 @@ export const ru: TranslationResources = {
     tokens: "Токены{{used}}/{{max}}",
     sessionCost: "Стоимость сеанса{{cost}}",
     accessibility: "Контекстное окно{{percentage}}% использовано",
+    usageAccessibility: "Использование",
+    unknown: "Неизвестно",
   },
   review: {
     comment: {

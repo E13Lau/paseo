@@ -4,7 +4,7 @@ import { ProviderUsageCard } from "./card";
 import { providerUsageCopy } from "./copy";
 import type { ProviderUsage, ProviderUsageView } from "./types";
 
-function matchProvider(
+export function matchProvider(
   providers: ProviderUsage[],
   activeProviderId: string | null | undefined,
 ): ProviderUsage | null {

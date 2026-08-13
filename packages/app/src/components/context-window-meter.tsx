@@ -1,10 +1,13 @@
-import { useCallback, useState } from "react";
+import { useCallback, useState, type ReactElement } from "react";
 import { Pressable, Text, View } from "react-native";
 import Svg, { Circle } from "react-native-svg";
 import { StyleSheet, useUnistyles } from "react-native-unistyles";
+import { ChartPie } from "lucide-react-native";
 import { useTranslation } from "react-i18next";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
+import { matchProvider, ProviderUsageTooltipSection } from "@/provider-usage/tooltip-section";
+import { providerUsageCopy } from "@/provider-usage/copy";
+import type { ProviderUsageView } from "@/provider-usage/types";
 import { useProviderUsage } from "@/provider-usage/use-provider-usage";
 import { formatTokenCount } from "./context-window-meter.utils";
 
@@ -16,8 +19,6 @@ interface ContextWindowMeterProps {
   serverId?: string;
   /** The Paseo provider key, e.g. "claude", "gemini", "codex" */
   provider?: string | null;
-  /** Reserve the meter footprint and show a loading ring while usage is pending. */
-  pending?: boolean;
   /** Optional glyph envelope for icon-toolbar alignment. */
   glyphSize?: number;
 }
@@ -96,6 +97,16 @@ function getMeterGeometry(showPercentage: boolean, glyphSize?: number) {
   };
 }
 
+function hasUsablePlanUsage(
+  view: ProviderUsageView,
+  activeProviderId: string | null | undefined,
+): boolean {
+  if (view.kind === "loading" || view.kind === "error") {
+    return true;
+  }
+  return matchProvider(view.payload.providers, activeProviderId) !== null;
+}
+
 export function ContextWindowMeter({
   maxTokens,
   usedTokens,
@@ -103,7 +114,6 @@ export function ContextWindowMeter({
   showPercentage = false,
   serverId,
   provider,
-  pending = false,
   glyphSize,
 }: ContextWindowMeterProps) {
   const { theme } = useUnistyles();
@@ -126,45 +136,28 @@ export function ContextWindowMeter({
   );
 
   const geometry = getMeterGeometry(showPercentage, glyphSize);
-
-  // No usage yet: reserve the footprint with a track-only ring while a session is
-  // active so the real ring fades in without shifting siblings. Render nothing when
-  // no usage is expected.
-  if (percentage === null || maxTokens === null || usedTokens === null) {
-    if (!pending) {
-      return null;
-    }
-    return (
-      <View style={geometry.containerStyle}>
-        <Svg
-          width={geometry.svgSize}
-          height={geometry.svgSize}
-          viewBox={`0 0 ${geometry.svgSize} ${geometry.svgSize}`}
-          style={styles.svg}
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-        >
-          <Circle
-            cx={geometry.center}
-            cy={geometry.center}
-            r={geometry.radius}
-            fill="none"
-            stroke={theme.colors.surface3}
-            strokeWidth={geometry.strokeWidth}
-          />
-        </Svg>
-        {showPercentage ? <View style={styles.skeletonLabel} /> : null}
-      </View>
-    );
-  }
-
-  const clampedPercentage = clampPercentage(percentage);
-  const roundedPercentage = Math.round(percentage);
-  const { svgSize, center, radius, strokeWidth, circumference, containerStyle } = geometry;
-  const dashOffset = circumference - (clampedPercentage / 100) * circumference;
-  const colors = getMeterColors(clampedPercentage, theme);
+  const hasContextPercentage = percentage !== null && maxTokens !== null && usedTokens !== null;
+  const showEmptyState = !hasContextPercentage && !hasUsablePlanUsage(providerUsageView, provider);
   const formattedSessionCost =
     typeof totalCostUsd === "number" ? formatSessionCost(totalCostUsd) : null;
+
+  let triggerContent: ReactElement;
+  if (hasContextPercentage) {
+    triggerContent = (
+      <KnownContextGlyph
+        colors={getMeterColors(clampPercentage(percentage), theme)}
+        geometry={geometry}
+        percentage={percentage}
+        showPercentage={showPercentage}
+      />
+    );
+  } else {
+    triggerContent = <ChartPie size={geometry.svgSize} color={theme.colors.foregroundMuted} />;
+  }
+
+  const accessibilityLabel = hasContextPercentage
+    ? t("contextWindow.accessibility", { percentage: Math.round(percentage) })
+    : t("contextWindow.usageAccessibility");
 
   return (
     <Tooltip
@@ -176,67 +169,100 @@ export function ContextWindowMeter({
     >
       <TooltipTrigger asChild triggerRefProp="ref">
         <Pressable
-          style={containerStyle}
+          style={geometry.containerStyle}
           testID="context-window-meter"
           accessibilityRole="image"
-          accessibilityLabel={t("contextWindow.accessibility", {
-            percentage: roundedPercentage,
-          })}
+          accessibilityLabel={accessibilityLabel}
         >
-          <Svg
-            width={svgSize}
-            height={svgSize}
-            viewBox={`0 0 ${svgSize} ${svgSize}`}
-            style={styles.svg}
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-          >
-            <Circle
-              cx={center}
-              cy={center}
-              r={radius}
-              fill="none"
-              stroke={colors.track}
-              strokeWidth={strokeWidth}
-            />
-            <Circle
-              cx={center}
-              cy={center}
-              r={radius}
-              fill="none"
-              stroke={colors.progress}
-              strokeWidth={strokeWidth}
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-            />
-          </Svg>
-          {showPercentage ? (
-            <Text style={styles.percentageLabel}>{`${roundedPercentage}%`}</Text>
-          ) : null}
+          {triggerContent}
         </Pressable>
       </TooltipTrigger>
       <TooltipContent side="top" align="center" offset={8}>
         <View style={styles.tooltipContent}>
-          <Text style={styles.tooltipTitle}>{t("contextWindow.title")}</Text>
-          <Text style={styles.tooltipText}>
-            {t("contextWindow.used", { percentage: roundedPercentage })}
-          </Text>
-          <Text style={styles.tooltipDetail}>
-            {t("contextWindow.tokens", {
-              used: formatTokenCount(usedTokens),
-              max: formatTokenCount(maxTokens),
-            })}
-          </Text>
-          {formattedSessionCost ? (
-            <Text style={styles.tooltipDetail}>
-              {t("contextWindow.sessionCost", { cost: formattedSessionCost })}
-            </Text>
-          ) : null}
-          <ProviderUsageTooltipSection view={providerUsageView} activeProviderId={provider} />
+          {showEmptyState ? (
+            <Text style={styles.tooltipText}>{providerUsageCopy.empty}</Text>
+          ) : (
+            <>
+              <Text style={styles.tooltipTitle}>{t("contextWindow.title")}</Text>
+              {hasContextPercentage ? (
+                <>
+                  <Text style={styles.tooltipText}>
+                    {t("contextWindow.used", { percentage: Math.round(percentage) })}
+                  </Text>
+                  <Text style={styles.tooltipDetail}>
+                    {t("contextWindow.tokens", {
+                      used: formatTokenCount(usedTokens),
+                      max: formatTokenCount(maxTokens),
+                    })}
+                  </Text>
+                  {formattedSessionCost ? (
+                    <Text style={styles.tooltipDetail}>
+                      {t("contextWindow.sessionCost", { cost: formattedSessionCost })}
+                    </Text>
+                  ) : null}
+                </>
+              ) : (
+                <Text style={styles.tooltipText}>{t("contextWindow.unknown")}</Text>
+              )}
+              <ProviderUsageTooltipSection view={providerUsageView} activeProviderId={provider} />
+            </>
+          )}
         </View>
       </TooltipContent>
     </Tooltip>
+  );
+}
+
+function KnownContextGlyph({
+  colors,
+  geometry,
+  percentage,
+  showPercentage,
+}: {
+  colors: { progress: string; track: string };
+  geometry: ReturnType<typeof getMeterGeometry>;
+  percentage: number;
+  showPercentage: boolean;
+}) {
+  const clampedPercentage = clampPercentage(percentage);
+  const roundedPercentage = Math.round(percentage);
+  const { svgSize, center, radius, strokeWidth, circumference } = geometry;
+  const dashOffset = circumference - (clampedPercentage / 100) * circumference;
+
+  return (
+    <>
+      <Svg
+        width={svgSize}
+        height={svgSize}
+        viewBox={`0 0 ${svgSize} ${svgSize}`}
+        style={styles.svg}
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+      >
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke={colors.track}
+          strokeWidth={strokeWidth}
+        />
+        <Circle
+          cx={center}
+          cy={center}
+          r={radius}
+          fill="none"
+          stroke={colors.progress}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={dashOffset}
+        />
+      </Svg>
+      {showPercentage ? (
+        <Text style={styles.percentageLabel}>{`${roundedPercentage}%`}</Text>
+      ) : null}
+    </>
   );
 }
 
@@ -263,12 +289,6 @@ const styles = StyleSheet.create((theme) => ({
     color: theme.colors.foregroundMuted,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.normal,
-  },
-  skeletonLabel: {
-    width: 22,
-    height: theme.fontSize.sm,
-    borderRadius: theme.borderRadius.full,
-    backgroundColor: theme.colors.surface3,
   },
   tooltipContent: {
     gap: theme.spacing[1.5],

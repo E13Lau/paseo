@@ -1720,6 +1720,8 @@ export const en = {
     tokens: "{{used}} / {{max}} tokens",
     sessionCost: "Session cost {{cost}}",
     accessibility: "Context window {{percentage}}% used",
+    usageAccessibility: "Usage",
+    unknown: "Unknown",
   },
   review: {
     comment: {

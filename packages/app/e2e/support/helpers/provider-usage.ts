@@ -38,7 +38,10 @@ function getSessionMessage(message: WebSocketMessage): Record<string, unknown> |
   return maybeEnvelope.message as Record<string, unknown>;
 }
 
-function withProviderUsageFeature(message: WebSocketMessage): string | null {
+function withProviderUsageFeature(
+  message: WebSocketMessage,
+  advertiseProviderUsage: boolean,
+): string | null {
   const envelope = parseJson(message);
   if (!envelope || typeof envelope !== "object") {
     return null;
@@ -68,7 +71,7 @@ function withProviderUsageFeature(message: WebSocketMessage): string | null {
           ...(typeof payload.features === "object" && payload.features !== null
             ? payload.features
             : {}),
-          providerUsageList: true,
+          providerUsageList: advertiseProviderUsage,
         },
       },
     },
@@ -78,7 +81,9 @@ function withProviderUsageFeature(message: WebSocketMessage): string | null {
 export async function installProviderUsageFixture(
   page: Page,
   payloads: ProviderUsageFixturePayload[],
+  options?: { advertiseProviderUsage?: boolean },
 ): Promise<ProviderUsageFixture> {
+  const advertiseProviderUsage = options?.advertiseProviderUsage ?? true;
   let requests = 0;
   const waiters: Array<{ count: number; resolve: () => void }> = [];
 
@@ -133,7 +138,10 @@ export async function installProviderUsageFixture(
     });
 
     server.onMessage((message) => {
-      const serverInfo = typeof message === "string" ? withProviderUsageFeature(message) : null;
+      const serverInfo =
+        typeof message === "string"
+          ? withProviderUsageFeature(message, advertiseProviderUsage)
+          : null;
       ws.send(serverInfo ?? message);
     });
   });

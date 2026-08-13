@@ -517,6 +517,8 @@ describe("translation resources", () => {
     expect(en.sidebarCallout.dismiss).toBe("Dismiss");
     expect(en.contextWindow.title).toBe("Context window");
     expect(en.contextWindow.used).toBe("{{percentage}}% used");
+    expect(en.contextWindow.unknown).toBe("Unknown");
+    expect(en.contextWindow.usageAccessibility).toBe("Usage");
   });
 
   it("includes view-model and policy utility keys for the Batch 4N migration", () => {

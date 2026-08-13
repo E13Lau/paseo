@@ -1193,7 +1193,6 @@ export function Composer({
   const [textSelection, setTextSelection] = useState<TextSelection>({ start: 0, end: 0 });
   const cursorIndex = textSelection.start;
   const [isProcessing, setIsProcessing] = useState(false);
-  const [pendingSavedPromptId, setPendingSavedPromptId] = useState<string | null>(null);
   const [isUploadingFile, setIsUploadingFile] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
   const [isMessageInputFocused, setIsMessageInputFocused] = useState(false);
@@ -2150,8 +2149,8 @@ export function Composer({
   const isSubmitLoadingVisible = isProcessing || isSubmitLoading || isUploadingFile;
   const isSubmitDisabled =
     isSubmitLoadingVisible || (waitForGithubAutoAttachOnSubmit && githubAutoAttach.isResolving);
-  // Independent auto-send only needs a live agent session. Pending state is per
-  // selected chip (`pendingSavedPromptId`), not global submit loading.
+  // Independent auto-send only needs a live agent session. Saved prompt actions
+  // stay enabled while a previous send is in flight.
   const canAutomaticallySendSavedPrompt = isConnected && hasAgent && !readOnly;
 
   const handleSavedPromptPressIn = useCallback(() => {
@@ -2191,22 +2190,20 @@ export function Composer({
 
       if (!canAutomaticallySendSavedPrompt) return;
 
-      if (preparedSelection?.wasInputFocused) {
-        messageInputRef.current?.focus();
-        if (isWeb) {
-          requestAnimationFrame(() => {
-            messageInputRef.current?.focus();
-            messageInputRef.current?.setSelection(preparedSelection.selection);
-          });
-        }
+      const selection =
+        preparedSelection?.selection ??
+        resolveCurrentTextSelection(messageInputRef.current, textSelection);
+      messageInputRef.current?.focus();
+      if (isWeb) {
+        requestAnimationFrame(() => {
+          messageInputRef.current?.focus();
+          messageInputRef.current?.setSelection(selection);
+        });
       }
 
-      setPendingSavedPromptId(prompt.id);
       void sendMessageWithContent(prompt.body, [], {
         forceSend: appSettings.sendBehavior === "interrupt",
         preserveComposer: true,
-      }).finally(() => {
-        setPendingSavedPromptId((current) => (current === prompt.id ? null : current));
       });
     },
     [
@@ -2220,6 +2217,10 @@ export function Composer({
     ],
   );
 
+  const handleSavedPromptRequestComposerFocus = useCallback(() => {
+    messageInputRef.current?.focus();
+  }, []);
+
   const savedPromptRow = useMemo(
     () =>
       savedPromptsEnabled && inputMode === "chat" && !readOnly ? (
@@ -2227,9 +2228,9 @@ export function Composer({
           prompts={appSettings.savedPrompts}
           automaticSending={appSettings.savedPromptAutomaticSending}
           canAutomaticSend={canAutomaticallySendSavedPrompt}
-          pendingPromptId={pendingSavedPromptId}
           onPrepareSelect={handleSavedPromptPressIn}
           onSelect={handleSavedPromptSelect}
+          onRequestComposerFocus={handleSavedPromptRequestComposerFocus}
         />
       ) : null,
     [
@@ -2237,9 +2238,9 @@ export function Composer({
       appSettings.savedPrompts,
       canAutomaticallySendSavedPrompt,
       handleSavedPromptPressIn,
+      handleSavedPromptRequestComposerFocus,
       handleSavedPromptSelect,
       inputMode,
-      pendingSavedPromptId,
       readOnly,
       savedPromptsEnabled,
     ],

@@ -83,6 +83,11 @@ async function acceptTemporaryRemoval(dialog: Dialog): Promise<void> {
   await dialog.accept();
 }
 
+async function acceptRemoval(dialog: Dialog): Promise<void> {
+  expect(dialog.message()).toContain("This removes the saved prompt from this client.");
+  await dialog.accept();
+}
+
 async function getComposerSelectionStart(page: Page): Promise<number | null> {
   return composerLocator(page).evaluate(
     (element) => (element as HTMLTextAreaElement).selectionStart,
@@ -94,6 +99,30 @@ async function getComposerSelection(page: Page): Promise<{ start: number; end: n
     const input = element as HTMLTextAreaElement;
     return { start: input.selectionStart, end: input.selectionEnd };
   });
+}
+
+function savedPromptTrigger(page: Page) {
+  return page.getByTestId("saved-prompts-composer-trigger");
+}
+
+function savedPromptAction(page: Page, name: string) {
+  return page.getByTestId("saved-prompts-composer-row").getByRole("button", { name, exact: true });
+}
+
+async function expectSavedPromptsCollapsed(page: Page): Promise<void> {
+  const trigger = savedPromptTrigger(page);
+  await expect(trigger).toBeVisible();
+  await expect(trigger).toHaveAccessibleName("Saved prompts");
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await expect(savedPromptAction(page, "Review notes")).toHaveCount(0);
+  await expect(savedPromptAction(page, "Action")).toHaveCount(0);
+}
+
+async function revealSavedPrompts(page: Page): Promise<void> {
+  const trigger = savedPromptTrigger(page);
+  await expect(trigger).toHaveAttribute("aria-expanded", "false");
+  await trigger.click();
+  await expect(trigger).toHaveAttribute("aria-expanded", "true");
 }
 
 async function expectPromptRowBeforeAttachment(page: Page): Promise<void> {
@@ -186,26 +215,69 @@ test.describe("Saved prompts", () => {
       });
       agents.push(agent);
 
-      await test.step("insertion replaces the selection and restores focus", async () => {
+      await test.step("the Composer starts collapsed and the trigger stays put", async () => {
         await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
         await expectComposerVisible(page);
         await expectAgentIdle(page);
         await expect(page.getByTestId("saved-prompts-composer-row")).toBeVisible();
+        await expectSavedPromptsCollapsed(page);
 
+        const trigger = savedPromptTrigger(page);
+        const before = await trigger.boundingBox();
+        expect(before).not.toBeNull();
+        await revealSavedPrompts(page);
+        const after = await trigger.boundingBox();
+        expect(after).not.toBeNull();
+        expect(after?.x).toBe(before?.x);
+        await expect(savedPromptAction(page, "Action")).toBeVisible();
+        await expect(savedPromptAction(page, "Review notes")).toBeVisible();
+
+        await composerLocator(page).click();
+        await expect(trigger).toHaveAttribute("aria-expanded", "true");
+        await page.locator("body").click({ position: { x: 8, y: 8 } });
+        await expect(trigger).toHaveAttribute("aria-expanded", "true");
+
+        await trigger.click();
+        await expectSavedPromptsCollapsed(page);
+      });
+
+      await test.step("insertion replaces the selection, restores focus, and collapses", async () => {
         const composer = composerLocator(page);
         await composer.fill("before SELECT after");
         await setComposerSelection(page, 7, 13);
         expect(await getComposerSelection(page)).toEqual({ start: 7, end: 13 });
-        await page.getByRole("button", { name: "Review notes", exact: true }).click();
+        await revealSavedPrompts(page);
+        await savedPromptAction(page, "Review notes").click();
         await expectComposerDraft(page, "before  revised\nbody  after");
         await expect(composer).toBeFocused();
         await expect.poll(getComposerSelectionStart.bind(null, page)).toBe(21);
+        await expectSavedPromptsCollapsed(page);
 
-        await page.getByRole("button", { name: "Review notes", exact: true }).click();
+        await revealSavedPrompts(page);
+        await savedPromptAction(page, "Review notes").click();
         await expectComposerDraft(page, "before  revised\nbody  revised\nbody  after");
+        await expectSavedPromptsCollapsed(page);
       });
 
-      await test.step("automatic sending is independent and only disables the selected action", async () => {
+      await test.step("keyboard reveal focuses the first prompt and Escape restores the input", async () => {
+        const composer = composerLocator(page);
+        await composer.focus();
+        await savedPromptTrigger(page).focus();
+        await page.keyboard.press("Enter");
+        await expect(savedPromptTrigger(page)).toHaveAttribute("aria-expanded", "true");
+        await expect(savedPromptAction(page, "Action")).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expectSavedPromptsCollapsed(page);
+        await expect(composer).toBeFocused();
+
+        await savedPromptTrigger(page).focus();
+        await page.keyboard.press("Space");
+        await expect(savedPromptAction(page, "Action")).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(composer).toBeFocused();
+      });
+
+      await test.step("automatic sending is independent and does not disable later actions", async () => {
         await page.goto(buildSettingsSectionRoute("saved-prompts"));
         await page.getByTestId("saved-prompts-automatic-sending").click();
         await expect(page.getByTestId("saved-prompts-automatic-sending")).toBeChecked();
@@ -213,6 +285,7 @@ test.describe("Saved prompts", () => {
         await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
         await expectComposerVisible(page);
         await expectAgentIdle(page);
+        await expectSavedPromptsCollapsed(page);
         await composerLocator(page).fill("unfinished draft");
         await attachImageFromMenu(page, IMAGE);
         await expectAttachmentPill(page, "composer-image-attachment-pill");
@@ -222,21 +295,26 @@ test.describe("Saved prompts", () => {
         await setComposerSelection(page, 3, 8);
         await expect(composerLocator(page)).toBeFocused();
         gate.holdNextClientRequest("send_agent_message_request");
-        const action = page.getByRole("button", { name: "Action", exact: true });
-        await action.click();
+        await revealSavedPrompts(page);
+        await savedPromptAction(page, "Action").click();
         await gate.waitForHeldClientRequest();
-        await expect(action).toBeDisabled();
-        await expect(page.getByRole("button", { name: "Review notes", exact: true })).toBeEnabled();
+        await expectSavedPromptsCollapsed(page);
         await expectComposerEditable(page);
         await expect(composerLocator(page)).toBeFocused();
         expect(await getComposerSelection(page)).toEqual({ start: 3, end: 8 });
+
+        await revealSavedPrompts(page);
+        await expect(savedPromptAction(page, "Action")).toBeEnabled();
+        await expect(savedPromptAction(page, "Review notes")).toBeEnabled();
         gate.releaseHeldClientRequest();
-        await expect(page.getByTestId("user-message").filter({ hasText: "/clear" })).toBeVisible();
+        await savedPromptAction(page, "Action").click();
+        await expectSavedPromptsCollapsed(page);
+        await expect(page.getByTestId("user-message").filter({ hasText: "/clear" })).toHaveCount(2);
         await expectComposerDraft(page, "unfinished draft");
         await expectAttachmentPill(page, "composer-image-attachment-pill");
       });
 
-      await test.step("automatic-send failure preserves unrelated composer state", async () => {
+      await test.step("automatic-send failure preserves unrelated composer state and stays collapsed", async () => {
         const rejectedAgent = await seedMockAgentWorkspace({
           repoPrefix: `saved-prompts-rejected-${testInfo.workerIndex}-`,
           title: "Saved prompt rejection",
@@ -246,16 +324,19 @@ test.describe("Saved prompts", () => {
         await openAgentRoute(page, rejectedAgent);
         await expectComposerVisible(page);
         await expectAgentIdle(page);
+        await expectSavedPromptsCollapsed(page);
         await composerLocator(page).fill("keep this draft");
         await attachImageFromMenu(page, IMAGE);
         await setComposerSelection(page, 2, 6);
         const sentBefore = await page.getByTestId("user-message").count();
 
-        await page.getByRole("button", { name: "Review notes", exact: true }).click();
+        await revealSavedPrompts(page);
+        await savedPromptAction(page, "Review notes").click();
 
         await expect(
           page.getByText("Requested mock prompt rejection", { exact: true }),
         ).toBeVisible();
+        await expectSavedPromptsCollapsed(page);
         await expect(page.getByTestId("user-message")).toHaveCount(sentBefore);
         await expectComposerDraft(page, "keep this draft");
         await expectAttachmentPill(page, "composer-image-attachment-pill");
@@ -273,6 +354,7 @@ test.describe("Saved prompts", () => {
         await setSendBehavior(page, "Queue");
         await openAgentRoute(page, runningAgent);
         await expectComposerVisible(page);
+        await expectSavedPromptsCollapsed(page);
         await runningAgent.client.sendAgentMessage(
           runningAgent.agentId,
           "Keep running while saved prompts are tested.",
@@ -281,33 +363,69 @@ test.describe("Saved prompts", () => {
         await composerLocator(page).fill("active unfinished draft");
         await attachImageFromMenu(page, IMAGE);
 
-        await page.getByRole("button", { name: "Review notes", exact: true }).click();
+        await revealSavedPrompts(page);
+        await savedPromptAction(page, "Review notes").click();
 
         await expect(page.getByText("revised\nbody", { exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name: "Send queued message now" })).toBeVisible();
+        await expectSavedPromptsCollapsed(page);
         await expectComposerDraft(page, "active unfinished draft");
         await expectAttachmentPill(page, "composer-image-attachment-pill");
 
         await setSendBehavior(page, "Interrupt");
         await openAgentRoute(page, runningAgent);
+        await expectSavedPromptsCollapsed(page);
         await expect(
           page.getByRole("button", { name: "Send and interrupt", exact: true }),
         ).toBeVisible();
-        await page.getByRole("button", { name: "Action", exact: true }).click();
+        await revealSavedPrompts(page);
+        await savedPromptAction(page, "Action").click();
 
         await expect(page.getByTestId("user-message").filter({ hasText: "/clear" })).toBeVisible();
+        await expectSavedPromptsCollapsed(page);
         await expectComposerDraft(page, "active unfinished draft");
         await expectAttachmentPill(page, "composer-image-attachment-pill");
       });
 
-      await test.step("automatic-send actions disable when the session is unavailable", async () => {
+      await test.step("disconnection leaves the trigger enabled and disables automatic-send actions", async () => {
         await gate.drop();
-        await expect(page.getByRole("button", { name: "Action", exact: true })).toBeDisabled();
-        await expect(
-          page.getByRole("button", { name: "Review notes", exact: true }),
-        ).toBeDisabled();
+        await expect(savedPromptTrigger(page)).toBeEnabled();
+        await revealSavedPrompts(page);
+        await expect(savedPromptAction(page, "Action")).toBeDisabled();
+        await expect(savedPromptAction(page, "Review notes")).toBeDisabled();
         await expectComposerDraft(page, "active unfinished draft");
         await expectAttachmentPill(page, "composer-image-attachment-pill");
+      });
+
+      await test.step("live settings updates appear in the open lane and an empty list removes it", async () => {
+        await gate.restore();
+        await page.goto(buildSettingsSectionRoute("saved-prompts"));
+        await openCreateForm(page);
+        await fillSavedPromptForm(page, { name: "Later", body: "added later" });
+        await saveForm(page);
+        await page.getByRole("button", { name: "Move Later up", exact: true }).click();
+        await expectPromptOrder(page, ["Action", "Later", "Review notes"]);
+
+        await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+        await expectComposerVisible(page);
+        await expectSavedPromptsCollapsed(page);
+        await revealSavedPrompts(page);
+        await expect(savedPromptAction(page, "Action")).toBeVisible();
+        await expect(savedPromptAction(page, "Later")).toBeVisible();
+        await expect(savedPromptAction(page, "Review notes")).toBeVisible();
+
+        await page.goto(buildSettingsSectionRoute("saved-prompts"));
+        page.once("dialog", acceptRemoval);
+        await page.getByRole("button", { name: "Remove Later", exact: true }).click();
+        page.once("dialog", acceptRemoval);
+        await page.getByRole("button", { name: "Remove Action", exact: true }).click();
+        page.once("dialog", acceptRemoval);
+        await page.getByRole("button", { name: "Remove Review notes", exact: true }).click();
+        await expect(page.getByTestId("saved-prompts-empty")).toBeVisible();
+
+        await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+        await expectComposerVisible(page);
+        await expect(page.getByTestId("saved-prompts-composer-row")).toHaveCount(0);
       });
     } finally {
       gate.restore();

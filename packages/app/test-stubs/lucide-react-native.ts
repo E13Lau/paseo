@@ -62,6 +62,7 @@ export const Link = StubIcon;
 export const Link2 = StubIcon;
 export const MessageSquare = StubIcon;
 export const MessageSquarePlus = StubIcon;
+export const MessageSquareText = StubIcon;
 export const Mic = StubIcon;
 export const MicOff = StubIcon;
 export const Monitor = StubIcon;

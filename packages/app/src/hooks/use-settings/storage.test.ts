@@ -11,6 +11,7 @@ import {
   loadSettingsFromStorage,
   parseClampedFontSize,
   parseTerminalScrollbackLines,
+  resetAppSettings,
   saveAppSettings,
   type SettingsDeps,
 } from "./storage";
@@ -399,6 +400,33 @@ describe("saveAppSettings", () => {
       theme: "light",
       toolCallDetailLevel: "overview",
     });
+  });
+});
+
+describe("resetAppSettings", () => {
+  it("clears saved prompts and disables automatic sending", async () => {
+    const deps = makeDeps({
+      storage: createInMemoryKeyValueStorage({
+        [APP_SETTINGS_KEY]: JSON.stringify({
+          ...DEFAULT_CLIENT_SETTINGS,
+          savedPrompts: [{ id: "review", name: "Review", body: "Review this" }],
+          savedPromptAutomaticSending: true,
+        }),
+      }),
+    });
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(APP_SETTINGS_QUERY_KEY, {
+      ...DEFAULT_CLIENT_SETTINGS,
+      savedPrompts: [{ id: "review", name: "Review", body: "Review this" }],
+      savedPromptAutomaticSending: true,
+    });
+
+    await resetAppSettings({ queryClient, deps });
+
+    expect(queryClient.getQueryData(APP_SETTINGS_QUERY_KEY)).toEqual(DEFAULT_CLIENT_SETTINGS);
+    expect(deps.storage.entries.get(APP_SETTINGS_KEY)).toBe(
+      JSON.stringify(DEFAULT_CLIENT_SETTINGS),
+    );
   });
 });
 

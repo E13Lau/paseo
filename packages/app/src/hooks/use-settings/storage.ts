@@ -149,6 +149,15 @@ export async function saveAppSettings(input: {
   await input.deps.storage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
 }
 
+export async function resetAppSettings(input: {
+  queryClient: QueryClient;
+  deps: SettingsDeps;
+}): Promise<void> {
+  const next = { ...DEFAULT_CLIENT_SETTINGS };
+  input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
+  await input.deps.storage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
+}
+
 export async function loadAppSettingsFromStorage(deps: SettingsDeps): Promise<AppSettings> {
   try {
     const stored = await deps.storage.getItem(APP_SETTINGS_KEY);

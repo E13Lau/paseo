@@ -1,8 +1,9 @@
 import { useCallback, useMemo, type ReactElement } from "react";
-import { ScrollView, View } from "react-native";
+import { ScrollView, View, type GestureResponderEvent } from "react-native";
 import { StyleSheet } from "react-native-unistyles";
 import { Button } from "@/components/ui/button";
 import { useIsCompactFormFactor } from "@/constants/layout";
+import { isWeb } from "@/constants/platform";
 import type { SavedPrompt } from "./model";
 
 interface SavedPromptButtonProps {
@@ -21,11 +22,20 @@ function SavedPromptButton({
   onSelect,
 }: SavedPromptButtonProps): ReactElement {
   const handlePress = useCallback(() => onSelect(prompt), [onSelect, prompt]);
+  const handlePressIn = useCallback(
+    (event: GestureResponderEvent) => {
+      if (isWeb) {
+        event.preventDefault();
+      }
+      onPrepareSelect();
+    },
+    [onPrepareSelect],
+  );
   return (
     <Button
       variant="secondary"
       size={compact ? "md" : "xs"}
-      onPressIn={onPrepareSelect}
+      onPressIn={handlePressIn}
       onPress={handlePress}
       disabled={disabled}
       accessibilityLabel={prompt.name}

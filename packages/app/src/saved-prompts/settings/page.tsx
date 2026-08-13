@@ -44,17 +44,22 @@ export function SavedPromptsPage(): ReactElement {
   const [isAutomaticSendingPending, setIsAutomaticSendingPending] = useState(false);
 
   const savePrompts = useCallback(
-    async (savedPrompts: SavedPrompt[]) => {
+    (savedPrompts: SavedPrompt[]) => {
       setSaveError(null);
-      try {
-        await updateSettings({ savedPrompts });
-      } catch (error) {
-        const message = toErrorMessage(error);
-        setSaveError(message);
-        throw error;
-      }
+      return updateSettings({ savedPrompts });
     },
     [updateSettings],
+  );
+
+  const saveListPrompts = useCallback(
+    async (savedPrompts: SavedPrompt[]) => {
+      try {
+        await savePrompts(savedPrompts);
+      } catch (error) {
+        setSaveError(toErrorMessage(error));
+      }
+    },
+    [savePrompts],
   );
 
   const handleCreateOpen = useCallback(() => setEditTarget({ mode: "create" }), []);
@@ -93,15 +98,15 @@ export function SavedPromptsPage(): ReactElement {
         return;
       }
       next.splice(target, 0, prompt);
-      void savePrompts(next).catch(() => {});
+      void saveListPrompts(next);
     },
-    [prompts, savePrompts],
+    [prompts, saveListPrompts],
   );
   const handleMoveUp = useCallback((id: string) => reorder(id, -1), [reorder]);
   const handleMoveDown = useCallback((id: string) => reorder(id, 1), [reorder]);
   const handleDragEnd = useCallback(
-    (next: SavedPrompt[]) => void savePrompts(next).catch(() => {}),
-    [savePrompts],
+    (next: SavedPrompt[]) => void saveListPrompts(next),
+    [saveListPrompts],
   );
 
   const handleRemove = useCallback(
@@ -117,12 +122,15 @@ export function SavedPromptsPage(): ReactElement {
         cancelLabel: t("common.actions.cancel"),
         destructive: true,
       })
-        .then((confirmed) =>
-          confirmed ? savePrompts(prompts.filter((entry) => entry.id !== id)) : undefined,
-        )
-        .catch(() => undefined);
+        .then((confirmed) => {
+          if (confirmed) {
+            return saveListPrompts(prompts.filter((entry) => entry.id !== id));
+          }
+          return undefined;
+        })
+        .catch((error) => setSaveError(toErrorMessage(error)));
     },
-    [prompts, savePrompts, t],
+    [prompts, saveListPrompts, t],
   );
 
   const handleAutomaticSendingChange = useCallback(

@@ -1769,7 +1769,7 @@ export const en = {
       behaviorTitle: "Behavior",
       listTitle: "Prompts",
       add: "Add saved prompt",
-      newPrompt: "New prompt",
+      newPrompt: "New saved prompt",
       empty: "No saved prompts yet",
       saveError: "Unable to save saved prompts",
       automaticSending: {

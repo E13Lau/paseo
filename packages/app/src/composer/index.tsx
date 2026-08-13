@@ -200,7 +200,7 @@ function resolveCurrentTextSelection(
   if (!isWeb) {
     return fallback;
   }
-  const element = input?.getNativeElement?.() as HTMLTextAreaElement | null | undefined;
+  const element = input?.getNativeElement?.();
   if (!element) {
     return fallback;
   }
@@ -208,6 +208,14 @@ function resolveCurrentTextSelection(
     start: element.selectionStart,
     end: element.selectionEnd,
   };
+}
+
+function resolveIsMessageInputFocused(input: MessageInputRef | null, fallback: boolean): boolean {
+  if (!isWeb) {
+    return fallback;
+  }
+  const element = input?.getNativeElement?.();
+  return element ? document.activeElement === element || fallback : fallback;
 }
 
 function resolveMessagePlaceholder(
@@ -923,6 +931,11 @@ interface QueueMessageOptions {
   preserveComposer?: boolean;
 }
 
+interface PreparedSavedPromptSelection {
+  selection: TextSelection;
+  wasInputFocused: boolean;
+}
+
 const MAX_FILE_SIZE_BYTES = 50 * 1024 * 1024;
 
 const EMPTY_ARRAY: readonly QueuedMessage[] = [];
@@ -1195,7 +1208,8 @@ export function Composer({
   const [lightboxMetadata, setLightboxMetadata] = useState<AttachmentMetadata | null>(null);
   const attachButtonRef = useRef<View | null>(null);
   const messageInputRef = useRef<MessageInputRef>(null);
-  const preparedSavedPromptSelectionRef = useRef<TextSelection | null>(null);
+  const wasMessageInputRecentlyFocusedRef = useRef(false);
+  const preparedSavedPromptSelectionRef = useRef<PreparedSavedPromptSelection | null>(null);
   const isComposerLocked = resolveIsComposerLocked(submitBehavior, isSubmitLoading);
   const keyboardHandlerIdRef = useRef(
     `message-input:${serverId}:${agentId}:${Math.random().toString(36).slice(2)}`,
@@ -1457,7 +1471,7 @@ export function Composer({
           setSelectedAttachments(composerWorkspaceAttachment.userAttachmentsOnly(nextAttachments));
         },
         setSendError,
-        setIsProcessing,
+        setIsProcessing: options.preserveComposer ? undefined : setIsProcessing,
         onSubmitError: (error) => {
           console.error("[AgentInput] Failed to send message:", error);
         },
@@ -2047,7 +2061,17 @@ export function Composer({
     (focused: boolean) => {
       setIsMessageInputFocused(focused);
       if (focused) {
+        wasMessageInputRecentlyFocusedRef.current = true;
         onAttentionInputFocus?.();
+      } else if (isWeb) {
+        requestAnimationFrame(() => {
+          wasMessageInputRecentlyFocusedRef.current = resolveIsMessageInputFocused(
+            messageInputRef.current,
+            false,
+          );
+        });
+      } else {
+        wasMessageInputRecentlyFocusedRef.current = false;
       }
     },
     [onAttentionInputFocus],
@@ -2135,14 +2159,18 @@ export function Composer({
   const isSubmitLoadingVisible = isProcessing || isSubmitLoading || isUploadingFile;
   const isSubmitDisabled =
     isSubmitLoadingVisible || (waitForGithubAutoAttachOnSubmit && githubAutoAttach.isResolving);
-  const canAutomaticallySendSavedPrompt =
-    isConnected && hasAgent && !isSubmitLoadingVisible && !readOnly;
+  // Independent auto-send only needs a live agent session. Pending state is per
+  // selected chip (`pendingSavedPromptId`), not global submit loading.
+  const canAutomaticallySendSavedPrompt = isConnected && hasAgent && !readOnly;
 
   const handleSavedPromptPressIn = useCallback(() => {
-    preparedSavedPromptSelectionRef.current = resolveCurrentTextSelection(
-      messageInputRef.current,
-      textSelection,
-    );
+    preparedSavedPromptSelectionRef.current = {
+      selection: resolveCurrentTextSelection(messageInputRef.current, textSelection),
+      wasInputFocused: resolveIsMessageInputFocused(
+        messageInputRef.current,
+        wasMessageInputRecentlyFocusedRef.current,
+      ),
+    };
   }, [textSelection]);
 
   const handleSavedPromptSelect = useCallback(
@@ -2153,7 +2181,7 @@ export function Composer({
         const result = applySavedPromptToSelection({
           text: userInput,
           selection:
-            preparedSelection ??
+            preparedSelection?.selection ??
             resolveCurrentTextSelection(messageInputRef.current, textSelection),
           body: prompt.body,
         });
@@ -2171,6 +2199,16 @@ export function Composer({
       }
 
       if (!canAutomaticallySendSavedPrompt) return;
+
+      if (preparedSelection?.wasInputFocused) {
+        messageInputRef.current?.focus();
+        if (isWeb) {
+          requestAnimationFrame(() => {
+            messageInputRef.current?.focus();
+            messageInputRef.current?.setSelection(preparedSelection.selection);
+          });
+        }
+      }
 
       setPendingSavedPromptId(prompt.id);
       void sendMessageWithContent(prompt.body, [], {

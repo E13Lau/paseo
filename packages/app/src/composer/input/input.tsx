@@ -164,7 +164,7 @@ export interface MessageInputRef {
    * Web-only: return the underlying DOM element for focus assertions/retries.
    * May return null if not mounted or on native.
    */
-  getNativeElement?: () => HTMLElement | null;
+  getNativeElement?: () => HTMLTextAreaElement | null;
 }
 
 const MIN_INPUT_HEIGHT_MOBILE = 30;
@@ -404,11 +404,11 @@ function handleDesktopKeyPressImpl(
 
 function getTextInputNativeElement(
   current: TextInput | (TextInput & { getNativeRef?: () => unknown }) | null,
-): HTMLElement | null {
+): HTMLTextAreaElement | null {
   if (!current) return null;
   const handle = current as TextInput & { getNativeRef?: () => unknown };
   const native = typeof handle.getNativeRef === "function" ? handle.getNativeRef() : current;
-  return native instanceof HTMLElement ? native : null;
+  return native instanceof HTMLTextAreaElement ? native : null;
 }
 
 interface PasteImagesEffectArgs {
@@ -1188,9 +1188,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       },
       setSelection: (nextSelection) => {
         if (!isWeb) return;
-        const element = getTextInputNativeElement(
-          textInputRef.current,
-        ) as HTMLTextAreaElement | null;
+        const element = getTextInputNativeElement(textInputRef.current);
         element?.setSelectionRange(nextSelection.start, nextSelection.end);
       },
       runKeyboardAction: (action) =>

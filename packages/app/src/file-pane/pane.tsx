@@ -32,6 +32,8 @@ import { useAppActivelyVisible } from "@/hooks/use-app-visible";
 import { isFileQueryEnabled } from "@/components/file-pane-enabled";
 import { isWeb } from "@/constants/platform";
 import { useAppSettings } from "@/hooks/use-settings";
+import { useFileDownload } from "@/hooks/use-file-download";
+import { buildFilePaneDownloadTarget } from "./download-target";
 import { useLiveFile } from "./live-file/hook";
 import { FilePanelBar } from "./bar";
 import { FileHtmlPreview } from "./html-preview";
@@ -399,11 +401,13 @@ function FilePreviewBody({
 
 export function FilePane({
   serverId,
+  workspaceId,
   workspaceRoot,
   location,
   navigationRevision,
 }: {
   serverId: string;
+  workspaceId?: string | null;
   workspaceRoot: string;
   location: WorkspaceFileLocation;
   navigationRevision: number;
@@ -486,6 +490,8 @@ export function FilePane({
   return (
     <FilePanePresentation
       serverId={serverId}
+      workspaceId={workspaceId}
+      workspaceRoot={normalizedWorkspaceRoot}
       client={client}
       readTarget={readTarget}
       preview={preview}
@@ -533,6 +539,8 @@ function isEditableTextFile(input: {
 
 function FilePanePresentation({
   serverId,
+  workspaceId,
+  workspaceRoot,
   client,
   readTarget,
   preview,
@@ -554,6 +562,8 @@ function FilePanePresentation({
   imagePreviewUri,
 }: {
   serverId: string;
+  workspaceId?: string | null;
+  workspaceRoot: string;
   client: DaemonClient | null;
   readTarget: { cwd: string; path: string } | null;
   preview: ExplorerFile | null;
@@ -574,6 +584,23 @@ function FilePanePresentation({
   navigationRevision: number;
   imagePreviewUri: string | null;
 }) {
+  const downloadFile = useFileDownload({
+    serverId,
+    workspaceId,
+    workspaceRoot,
+  });
+  const downloadTarget = buildFilePaneDownloadTarget({
+    preview,
+    readTarget,
+    filename,
+  });
+  const handleDownload = useCallback(() => {
+    if (!downloadTarget) {
+      return;
+    }
+    downloadFile(downloadTarget);
+  }, [downloadFile, downloadTarget]);
+  const onDownload = downloadTarget ? handleDownload : undefined;
   if (!client && readTarget) {
     return (
       <View style={styles.container} testID="workspace-file-pane">
@@ -598,6 +625,7 @@ function FilePanePresentation({
         filename={filename}
         mode={previewMode}
         onModeChange={onPreviewModeChange}
+        onDownload={onDownload}
         isLoading={isLoading}
         isMobile={isMobile}
         location={location}
@@ -627,6 +655,7 @@ function FilePanePresentation({
           lineCount={lineCount}
           mode={previewMode}
           onModeChange={onPreviewModeChange}
+          onDownload={onDownload}
         />
       ) : null}
       <FilePreviewBody
@@ -653,6 +682,7 @@ function EditableFilePane({
   filename,
   mode,
   onModeChange,
+  onDownload,
   isLoading,
   isMobile,
   location,
@@ -668,6 +698,7 @@ function EditableFilePane({
   filename: string;
   mode?: "preview" | "source";
   onModeChange?: (mode: "preview" | "source") => void;
+  onDownload?: () => void;
   isLoading: boolean;
   isMobile: boolean;
   location: WorkspaceFileLocation;
@@ -789,6 +820,7 @@ function EditableFilePane({
         conflict={conflict}
         mode={mode}
         onModeChange={onModeChange}
+        onDownload={onDownload}
       />
       {showSource ? (
         <FileEditorView

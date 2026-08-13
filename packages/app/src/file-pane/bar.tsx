@@ -1,8 +1,11 @@
 import { Text, View } from "react-native";
 import { StyleSheet, withUnistyles } from "react-native-unistyles";
 import { useTranslation } from "react-i18next";
+import { Download } from "lucide-react-native";
+import { Button } from "@/components/ui/button";
 import { LoadingSpinner } from "@/components/ui/loading-spinner";
 import { SegmentedControl } from "@/components/ui/segmented-control";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { Theme } from "@/styles/theme";
 import { FileConflictAlert, type FileConflictAlertState } from "./conflict-alert";
 import type { FileEditorStatus } from "./editor/model";
@@ -19,6 +22,7 @@ export function FilePanelBar({
   cursor,
   vimMode,
   conflict,
+  onDownload,
 }: {
   size: number;
   lineCount?: number;
@@ -28,6 +32,7 @@ export function FilePanelBar({
   cursor?: { line: number; column: number };
   vimMode?: string | null;
   conflict?: FileConflictAlertState;
+  onDownload?: () => void;
 }) {
   const { t } = useTranslation();
   const previewModes = [
@@ -41,7 +46,7 @@ export function FilePanelBar({
   return (
     <View style={styles.chrome} testID="file-panel-bar">
       <View style={styles.row}>
-        <View style={styles.metadata}>
+        <View style={styles.metadata} testID="file-panel-bar-metadata">
           <Text
             style={styles.whisper}
             accessibilityLabel={t("panels.file.editor.fileSize", { size: formatFileSize(size) })}
@@ -97,15 +102,36 @@ export function FilePanelBar({
             </Text>
           ) : null}
         </View>
-        {mode && onModeChange ? (
-          <SegmentedControl
-            size="xs"
-            value={mode}
-            onValueChange={onModeChange}
-            testID="file-preview-mode"
-            options={previewModes}
-          />
-        ) : null}
+        <View style={styles.actions} testID="file-panel-bar-actions">
+          {onDownload ? (
+            <Tooltip delayDuration={300}>
+              <TooltipTrigger asChild>
+                <View>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    leftIcon={Download}
+                    accessibilityLabel={t("workspace.fileActions.download")}
+                    testID="file-panel-download"
+                    onPress={onDownload}
+                  />
+                </View>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">
+                <Text style={styles.tooltipText}>{t("workspace.fileActions.download")}</Text>
+              </TooltipContent>
+            </Tooltip>
+          ) : null}
+          {mode && onModeChange ? (
+            <SegmentedControl
+              size="xs"
+              value={mode}
+              onValueChange={onModeChange}
+              testID="file-preview-mode"
+              options={previewModes}
+            />
+          ) : null}
+        </View>
       </View>
       {conflict ? <FileConflictAlert state={conflict} /> : null}
     </View>
@@ -138,6 +164,16 @@ const styles = StyleSheet.create((theme) => ({
     flexDirection: "row",
     alignItems: "center",
     gap: theme.spacing[2],
+  },
+  actions: {
+    flexShrink: 0,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing[2],
+  },
+  tooltipText: {
+    color: theme.colors.foreground,
+    fontSize: theme.fontSize.xs,
   },
   secondary: { color: theme.colors.foregroundMuted, fontSize: theme.fontSize.xs },
   whisper: { color: theme.colors.foregroundExtraMuted, fontSize: theme.fontSize.xs },

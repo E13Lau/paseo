@@ -137,12 +137,16 @@ export interface MessageInputProps {
   onKeyPress?: (event: { key: string; preventDefault: () => void }) => boolean;
   /** Reports cursor selection updates from the underlying input. */
   onSelectionChange?: (selection: { start: number; end: number }) => void;
+  /** Controlled edit range used when an external action changes the input text. */
+  selection?: { start: number; end: number };
   onFocusChange?: (focused: boolean) => void;
   onHeightChange?: (height: number) => void;
   /** Extra styles merged onto the input wrapper (e.g. elevated background). */
   inputWrapperStyle?: import("react-native").ViewStyle;
   /** Content rendered inside the bordered input surface, above the text input (e.g. attachment pills). */
   attachmentSlot?: React.ReactNode;
+  /** Saved prompt actions rendered above the attachment tray. */
+  savedPromptSlot?: React.ReactNode;
   /** What this composer is for. See `@/composer/input-mode` for what each mode implies. */
   inputMode?: ComposerInputMode;
   /** Renders `value` as static text on the same surface, for content there is nothing to type into. */
@@ -154,6 +158,7 @@ export interface MessageInputProps {
 export interface MessageInputRef {
   focus: () => void;
   blur: () => void;
+  setSelection: (selection: { start: number; end: number }) => void;
   runKeyboardAction: (action: MessageInputKeyboardActionKind) => boolean;
   /**
    * Web-only: return the underlying DOM element for focus assertions/retries.
@@ -602,6 +607,7 @@ interface ComposerTextSurfaceProps {
   onContentSizeChange: (event: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) => void;
   onKeyPress: ((event: WebTextInputKeyPressEvent) => void) | undefined;
   onSelectionChange: (event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) => void;
+  selection: { start: number; end: number } | undefined;
   focusHintVisible: boolean;
   focusInputKeys: ShortcutChord | null | undefined;
   focusHintLabel: string;
@@ -641,6 +647,7 @@ function ComposerTextSurface(props: ComposerTextSurfaceProps): React.ReactElemen
         editable={props.editable}
         onKeyPress={props.onKeyPress}
         onSelectionChange={props.onSelectionChange}
+        selection={props.selection}
         autoFocus={props.autoFocus}
       />
       <FocusHint
@@ -1038,10 +1045,12 @@ interface ResolvedMessageInputProps {
   onSubmitLoadingPress: (() => void) | undefined;
   onKeyPressCallback: ((event: { key: string; preventDefault: () => void }) => boolean) | undefined;
   onSelectionChangeCallback: ((selection: { start: number; end: number }) => void) | undefined;
+  selection: { start: number; end: number } | undefined;
   onFocusChange: ((focused: boolean) => void) | undefined;
   onHeightChange: ((height: number) => void) | undefined;
   inputWrapperStyle: import("react-native").ViewStyle | undefined;
   attachmentSlot: React.ReactNode;
+  savedPromptSlot: React.ReactNode;
   inputMode: ComposerInputMode;
   readOnly: boolean;
   submitLabel: string | undefined;
@@ -1084,10 +1093,12 @@ function resolveMessageInputProps(props: MessageInputProps): ResolvedMessageInpu
     onSubmitLoadingPress: props.onSubmitLoadingPress,
     onKeyPressCallback: props.onKeyPress,
     onSelectionChangeCallback: props.onSelectionChange,
+    selection: props.selection,
     onFocusChange: props.onFocusChange,
     onHeightChange: props.onHeightChange,
     inputWrapperStyle: props.inputWrapperStyle,
     attachmentSlot: props.attachmentSlot,
+    savedPromptSlot: props.savedPromptSlot,
     inputMode: props.inputMode ?? "chat",
     readOnly: props.readOnly ?? false,
     submitLabel: props.submitLabel,
@@ -1138,10 +1149,12 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       onSubmitLoadingPress,
       onKeyPressCallback,
       onSelectionChangeCallback,
+      selection,
       onFocusChange,
       onHeightChange,
       inputWrapperStyle,
       attachmentSlot,
+      savedPromptSlot,
       inputMode,
       readOnly,
       submitLabel,
@@ -1172,6 +1185,13 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
       },
       blur: () => {
         textInputRef.current?.blur?.();
+      },
+      setSelection: (nextSelection) => {
+        if (!isWeb) return;
+        const element = getTextInputNativeElement(
+          textInputRef.current,
+        ) as HTMLTextAreaElement | null;
+        element?.setSelectionRange(nextSelection.start, nextSelection.end);
       },
       runKeyboardAction: (action) =>
         runMessageInputKeyboardAction(action, {
@@ -1713,6 +1733,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
           style={inputWrapperCombinedStyle}
           pointerEvents={surfacePresentation.input.pointerEvents}
         >
+          {savedPromptSlot}
           {attachmentSlot}
           {/* Text input */}
           <ComposerTextSurface
@@ -1732,6 +1753,7 @@ export const MessageInput = forwardRef<MessageInputRef, MessageInputProps>(
             onContentSizeChange={handleContentSizeChange}
             onKeyPress={shouldHandleWebKeyPress ? handleDesktopKeyPress : undefined}
             onSelectionChange={handleSelectionChange}
+            selection={selection}
             focusHintVisible={isWeb && isPaneFocused && !isInputFocused && !value}
             focusInputKeys={focusInputKeys}
             focusHintLabel={t("composer.input.focusHint", {

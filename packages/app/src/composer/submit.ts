@@ -8,6 +8,8 @@ export interface AgentInputSubmitActionInput<TAttachment> {
   hasExternalContent?: boolean;
   allowEmptySubmit?: boolean;
   submitBehavior?: "clear" | "preserve-and-lock";
+  /** Submit different content without changing or completing the current draft lifecycle. */
+  preserveComposer?: boolean;
   forceSend?: boolean;
   isAgentRunning: boolean;
   canSubmit: boolean;
@@ -27,7 +29,8 @@ export async function submitAgentInput<TAttachment>(
 ): Promise<AgentInputSubmitResult> {
   const trimmedMessage = input.message.trim();
   const attachments = input.attachments;
-  const shouldClearOnSubmit = input.submitBehavior !== "preserve-and-lock";
+  const shouldClearOnSubmit =
+    input.submitBehavior !== "preserve-and-lock" && input.preserveComposer !== true;
 
   if (
     !trimmedMessage &&
@@ -61,7 +64,9 @@ export async function submitAgentInput<TAttachment>(
 
   try {
     await input.submitMessage({ message: trimmedMessage, attachments });
-    input.clearDraft("sent");
+    if (!input.preserveComposer) {
+      input.clearDraft("sent");
+    }
     input.setIsProcessing(false);
     return "submitted";
   } catch (error) {

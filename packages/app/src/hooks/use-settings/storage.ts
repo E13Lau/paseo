@@ -14,6 +14,7 @@ import {
   type SidebarRowItems,
 } from "@/components/sidebar/display-preferences/row-items";
 import { THEME_OPTIONS, type ThemePreference } from "@/styles/theme";
+import { normalizeSavedPrompts, type SavedPrompt } from "@/saved-prompts/model";
 
 export const APP_SETTINGS_KEY = "@paseo:app-settings";
 export const APP_SETTINGS_QUERY_KEY = ["app-settings"];
@@ -67,6 +68,8 @@ export interface AppSettings {
   toolCallDetailLevel: ToolCallDetailLevel;
   chatOutlineEnabled: boolean;
   vimKeybindings: boolean;
+  savedPrompts: SavedPrompt[];
+  savedPromptAutomaticSending: boolean;
 }
 
 export interface Settings extends AppSettings {
@@ -103,6 +106,8 @@ export const DEFAULT_CLIENT_SETTINGS: AppSettings = {
   toolCallDetailLevel: "detailed",
   chatOutlineEnabled: true,
   vimKeybindings: false,
+  savedPrompts: [],
+  savedPromptAutomaticSending: false,
 };
 
 export const DEFAULT_APP_SETTINGS: Settings = {
@@ -139,7 +144,7 @@ export async function saveAppSettings(input: {
     input.queryClient.getQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY) ??
     (await loadAppSettingsFromStorage(input.deps));
   const current = normalizeAppSettings(storedCurrent);
-  const next = { ...current, ...input.updates };
+  const next = normalizeAppSettings({ ...current, ...input.updates });
   input.queryClient.setQueryData<AppSettings>(APP_SETTINGS_QUERY_KEY, next);
   await input.deps.storage.setItem(APP_SETTINGS_KEY, JSON.stringify(next));
 }
@@ -243,6 +248,9 @@ function pickBooleanAppSettings(stored: StoredAppSettings): Partial<AppSettings>
   if (typeof stored.chatOutlineEnabled === "boolean") {
     result.chatOutlineEnabled = stored.chatOutlineEnabled;
   }
+  if (typeof stored.savedPromptAutomaticSending === "boolean") {
+    result.savedPromptAutomaticSending = stored.savedPromptAutomaticSending;
+  }
   return result;
 }
 
@@ -324,6 +332,9 @@ function pickAppSettings(stored: StoredAppSettings): Partial<AppSettings> {
     result.codeFontSize = codeFontSize;
   }
   Object.assign(result, pickBooleanAppSettings(stored));
+  if (stored.savedPrompts !== undefined) {
+    result.savedPrompts = normalizeSavedPrompts(stored.savedPrompts);
+  }
   if (typeof stored.autoExpandReasoning === "boolean") {
     result.autoExpandReasoning = stored.autoExpandReasoning;
   }

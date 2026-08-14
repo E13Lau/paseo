@@ -2225,6 +2225,7 @@ export function Composer({
     () =>
       savedPromptsEnabled && inputMode === "chat" && !readOnly ? (
         <SavedPromptComposerRow
+          key={agentId}
           prompts={appSettings.savedPrompts}
           automaticSending={appSettings.savedPromptAutomaticSending}
           canAutomaticSend={canAutomaticallySendSavedPrompt}
@@ -2234,6 +2235,7 @@ export function Composer({
         />
       ) : null,
     [
+      agentId,
       appSettings.savedPromptAutomaticSending,
       appSettings.savedPrompts,
       canAutomaticallySendSavedPrompt,

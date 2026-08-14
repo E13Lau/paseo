@@ -34,24 +34,6 @@ interface SavedPromptButtonProps {
   onSelect: (prompt: SavedPrompt) => void;
 }
 
-function focusElementByTestId(testID: string): void {
-  if (!isWeb) return;
-  const root = globalThis.document;
-  if (!root) return;
-  const element = root.querySelector(`[data-testid="${testID}"]`);
-  if (element && "focus" in element && typeof element.focus === "function") {
-    element.focus();
-  }
-}
-
-function isEscapeKey(event: { key?: string }): boolean {
-  return event.key === "Escape";
-}
-
-function isActivationKey(event: { key?: string }): boolean {
-  return event.key === "Enter" || event.key === " " || event.key === "Spacebar";
-}
-
 function SavedPromptButton({
   prompt,
   disabled,
@@ -160,16 +142,18 @@ export function SavedPromptComposerRow({
 
     const handleWindowKeyDown = (event: KeyboardEvent) => {
       const target = event.target;
-      if (!(target instanceof Element)) return;
-      const row = root.querySelector('[data-testid="saved-prompts-composer-row"]');
       const trigger = root.querySelector('[data-testid="saved-prompts-composer-trigger"]');
-      if (isEscapeKey(event) && expanded && row?.contains(target)) {
+      if (event.key === "Escape" && expanded) {
         event.preventDefault();
         event.stopPropagation();
         collapseAndRestoreFocus();
         return;
       }
-      if (isActivationKey(event) && trigger?.contains(target)) {
+      if (
+        (event.key === "Enter" || event.key === " " || event.key === "Spacebar") &&
+        target instanceof Element &&
+        trigger?.contains(target)
+      ) {
         event.preventDefault();
         event.stopPropagation();
         setExpanded((current) => {
@@ -194,11 +178,17 @@ export function SavedPromptComposerRow({
     if (!expanded || !shouldFocusFirstRef.current || prompts.length === 0) {
       return;
     }
+    if (!isWeb) return;
     shouldFocusFirstRef.current = false;
     const firstId = prompts[0]?.id;
     if (!firstId) return;
     const frame = requestAnimationFrame(() => {
-      focusElementByTestId(`saved-prompt-composer-${firstId}`);
+      const element = globalThis.document.querySelector(
+        `[data-testid="saved-prompt-composer-${firstId}"]`,
+      );
+      if (element && "focus" in element && typeof element.focus === "function") {
+        element.focus();
+      }
     });
     return () => cancelAnimationFrame(frame);
   }, [expanded, prompts]);

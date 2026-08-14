@@ -214,6 +214,11 @@ test.describe("Saved prompts", () => {
         title: "Saved prompts journey",
       });
       agents.push(agent);
+      const alternateAgent = await seedMockAgentWorkspace({
+        repoPrefix: `saved-prompts-alternate-${testInfo.workerIndex}-`,
+        title: "Saved prompts alternate journey",
+      });
+      agents.push(alternateAgent);
 
       await test.step("the Composer starts collapsed and the trigger stays put", async () => {
         await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
@@ -232,8 +237,26 @@ test.describe("Saved prompts", () => {
         await expect(savedPromptAction(page, "Action")).toBeVisible();
         await expect(savedPromptAction(page, "Review notes")).toBeVisible();
 
+        await openAgentRoute(page, {
+          workspaceId: alternateAgent.workspaceId,
+          agentId: alternateAgent.agentId,
+        });
+        await expectComposerVisible(page);
+        await expectAgentIdle(page);
+        await expectSavedPromptsCollapsed(page);
+
+        await openAgentRoute(page, { workspaceId: agent.workspaceId, agentId: agent.agentId });
+        await expectComposerVisible(page);
+        await expectAgentIdle(page);
+        await revealSavedPrompts(page);
+
         await composerLocator(page).click();
         await expect(trigger).toHaveAttribute("aria-expanded", "true");
+        await page.keyboard.press("Escape");
+        await expectSavedPromptsCollapsed(page);
+        await expect(composerLocator(page)).toBeFocused();
+
+        await revealSavedPrompts(page);
         await page.locator("body").click({ position: { x: 8, y: 8 } });
         await expect(trigger).toHaveAttribute("aria-expanded", "true");
 

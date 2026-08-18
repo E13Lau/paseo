@@ -111,6 +111,32 @@ function boundSelectionIndex(value: number, textLength: number): number {
   return Math.min(textLength, Math.max(0, Math.floor(value)));
 }
 
+export type SavedPromptComposerAction = "insert" | "send" | "noop";
+
+export type SavedPromptComposerDismissReason = "select" | "escape";
+
+export interface SavedPromptComposerPlan {
+  action: SavedPromptComposerAction;
+  requestComposerFocus: boolean;
+}
+
+export function planSavedPromptComposerDismiss(input: {
+  automaticSending: boolean;
+  canSend: boolean;
+  reason: SavedPromptComposerDismissReason;
+}): SavedPromptComposerPlan {
+  if (input.reason === "escape") {
+    return { action: "noop", requestComposerFocus: true };
+  }
+  if (!input.automaticSending) {
+    return { action: "insert", requestComposerFocus: true };
+  }
+  if (input.canSend) {
+    return { action: "send", requestComposerFocus: false };
+  }
+  return { action: "noop", requestComposerFocus: false };
+}
+
 export function applySavedPromptToSelection(input: {
   text: string;
   selection: TextSelection;

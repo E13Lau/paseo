@@ -138,6 +138,7 @@ import {
 import { SavedPromptComposerRow } from "@/saved-prompts/composer-row";
 import {
   applySavedPromptToSelection,
+  planSavedPromptComposerDismiss,
   type SavedPrompt,
   type TextSelection,
 } from "@/saved-prompts/model";
@@ -2149,9 +2150,10 @@ export function Composer({
   const isSubmitLoadingVisible = isProcessing || isSubmitLoading || isUploadingFile;
   const isSubmitDisabled =
     isSubmitLoadingVisible || (waitForGithubAutoAttachOnSubmit && githubAutoAttach.isResolving);
-  // Independent auto-send only needs a live agent session. Saved prompt actions
-  // stay enabled while a previous send is in flight.
-  const canAutomaticallySendSavedPrompt = isConnected && hasAgent && !readOnly;
+  // Live sessions need a connected agent. Draft / parent-owned submits
+  // (new session) can send through onSubmitMessage without an agent yet.
+  const canAutomaticallySendSavedPrompt =
+    !readOnly && ((isConnected && hasAgent) || Boolean(onSubmitMessage));
 
   const handleSavedPromptPressIn = useCallback(() => {
     preparedSavedPromptSelectionRef.current = {
@@ -2167,7 +2169,12 @@ export function Composer({
     (prompt: SavedPrompt) => {
       const preparedSelection = preparedSavedPromptSelectionRef.current;
       preparedSavedPromptSelectionRef.current = null;
-      if (!appSettings.savedPromptAutomaticSending) {
+      const plan = planSavedPromptComposerDismiss({
+        automaticSending: appSettings.savedPromptAutomaticSending,
+        canSend: canAutomaticallySendSavedPrompt,
+        reason: "select",
+      });
+      if (plan.action === "insert") {
         const result = applySavedPromptToSelection({
           text: userInput,
           selection:
@@ -2178,28 +2185,19 @@ export function Composer({
         setSendError(null);
         setUserInput(result.text);
         setTextSelection(result.selection);
-        messageInputRef.current?.focus();
-        if (isWeb) {
-          requestAnimationFrame(() => {
-            messageInputRef.current?.focus();
-            messageInputRef.current?.setSelection(result.selection);
-          });
+        if (plan.requestComposerFocus) {
+          messageInputRef.current?.focus();
+          if (isWeb) {
+            requestAnimationFrame(() => {
+              messageInputRef.current?.focus();
+              messageInputRef.current?.setSelection(result.selection);
+            });
+          }
         }
         return;
       }
 
-      if (!canAutomaticallySendSavedPrompt) return;
-
-      const selection =
-        preparedSelection?.selection ??
-        resolveCurrentTextSelection(messageInputRef.current, textSelection);
-      messageInputRef.current?.focus();
-      if (isWeb) {
-        requestAnimationFrame(() => {
-          messageInputRef.current?.focus();
-          messageInputRef.current?.setSelection(selection);
-        });
-      }
+      if (plan.action !== "send") return;
 
       void sendMessageWithContent(prompt.body, [], {
         forceSend: appSettings.sendBehavior === "interrupt",

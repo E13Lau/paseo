@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { applySavedPromptToSelection, normalizeSavedPrompts, validateSavedPrompt } from "./model";
+import {
+  applySavedPromptToSelection,
+  normalizeSavedPrompts,
+  planSavedPromptComposerDismiss,
+  validateSavedPrompt,
+} from "./model";
 
 describe("normalizeSavedPrompts", () => {
   it("keeps valid prompts in stored order while preserving body whitespace", () => {
@@ -58,6 +63,48 @@ describe("validateSavedPrompt", () => {
       nameError: "duplicate",
       bodyError: "required",
     });
+  });
+});
+
+describe("planSavedPromptComposerDismiss", () => {
+  it("inserts and requests Composer focus when automatic sending is off", () => {
+    expect(
+      planSavedPromptComposerDismiss({
+        automaticSending: false,
+        canSend: true,
+        reason: "select",
+      }),
+    ).toEqual({ action: "insert", requestComposerFocus: true });
+  });
+
+  it("sends without requesting Composer focus when automatic sending can send", () => {
+    expect(
+      planSavedPromptComposerDismiss({
+        automaticSending: true,
+        canSend: true,
+        reason: "select",
+      }),
+    ).toEqual({ action: "send", requestComposerFocus: false });
+  });
+
+  it("does nothing and leaves focus alone when automatic sending cannot send", () => {
+    expect(
+      planSavedPromptComposerDismiss({
+        automaticSending: true,
+        canSend: false,
+        reason: "select",
+      }),
+    ).toEqual({ action: "noop", requestComposerFocus: false });
+  });
+
+  it("requests Composer focus on Escape without inserting or sending", () => {
+    expect(
+      planSavedPromptComposerDismiss({
+        automaticSending: true,
+        canSend: true,
+        reason: "escape",
+      }),
+    ).toEqual({ action: "noop", requestComposerFocus: true });
   });
 });
 

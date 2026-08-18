@@ -260,6 +260,13 @@ export const PersistedConfigSchema = z
         appendSystemPrompt: z.string().optional(),
         terminalProfiles: z.array(TerminalProfileSchema).optional(),
         agentProfiles: z.array(AgentProfileSchema).optional(),
+        conversationHistory: z
+          .object({
+            enabled: z.boolean(),
+            providers: z.array(z.enum(["claude", "codex", "pi", "omp"])),
+          })
+          .strict()
+          .optional(),
         cors: z
           .object({
             allowedOrigins: z.array(z.string()).optional(),

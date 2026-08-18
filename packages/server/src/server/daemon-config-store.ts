@@ -360,6 +360,9 @@ function mergeMutableConfigIntoPersistedConfig(params: {
         ? { terminalProfiles: mutable.terminalProfiles }
         : {}),
       ...(mutable.agentProfiles !== undefined ? { agentProfiles: mutable.agentProfiles } : {}),
+      ...(mutable.conversationHistory !== undefined
+        ? { conversationHistory: mutable.conversationHistory }
+        : {}),
     },
     agents: nextAgents,
   } as PersistedConfig;

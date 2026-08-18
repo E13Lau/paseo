@@ -71,6 +71,11 @@ import {
   normalizeClientRestartRpcReason,
 } from "./lifecycle-reasons.js";
 import { DirectorySyncService } from "./directory-sync/index.js";
+import {
+  ConversationHistoryError,
+  getConversationHistoryService,
+  type ConversationHistoryService,
+} from "./conversation-history/service.js";
 
 import { AgentManager, AgentRunCancellationError } from "./agent/agent-manager.js";
 import { buildTimelinePromptIndex } from "./agent/timeline-prompt-index.js";
@@ -687,6 +692,7 @@ export class Session {
   private readonly hubExecutionController: HubExecutionController | null;
   private readonly workspaceScripts: WorkspaceScriptsService;
   private readonly createAgentLifecycleDispatch: CreateAgentLifecycleDispatch;
+  private readonly conversationHistory: ConversationHistoryService;
 
   constructor(options: SessionOptions) {
     const {
@@ -762,6 +768,12 @@ export class Session {
       module: "session",
       clientId: this.clientId,
       sessionId: this.sessionId,
+    });
+    this.conversationHistory = getConversationHistoryService({
+      paseoHome,
+      configStore: daemonConfigStore,
+      projectRegistry,
+      logger: this.sessionLogger,
     });
     this.workspaceFilesSession = new WorkspaceFilesSession({
       host: {
@@ -1863,8 +1875,92 @@ export class Session {
       this.dispatchProviderMessage(msg) ??
       this.dispatchTerminalMessage(msg) ??
       this.dispatchScheduleMessage(msg) ??
+      this.dispatchConversationHistoryMessage(msg) ??
       this.dispatchMiscMessage(msg);
     if (promise) await promise;
+  }
+
+  private dispatchConversationHistoryMessage(
+    msg: SessionInboundMessage,
+  ): Promise<void> | undefined {
+    if (!msg.type.startsWith("conversation_history.")) return undefined;
+    return this.handleConversationHistoryMessage(msg);
+  }
+
+  private async handleConversationHistoryMessage(msg: SessionInboundMessage): Promise<void> {
+    try {
+      switch (msg.type) {
+        case "conversation_history.get_settings.request":
+          this.emit({
+            type: "conversation_history.get_settings.response",
+            payload: { requestId: msg.requestId, ...(await this.conversationHistory.settings()) },
+          });
+          return;
+        case "conversation_history.set_settings.request":
+          this.emit({
+            type: "conversation_history.set_settings.response",
+            payload: {
+              requestId: msg.requestId,
+              ...(await this.conversationHistory.setSettings(msg.enabled, msg.providers)),
+            },
+          });
+          return;
+        case "conversation_history.get_status.request":
+          this.emit({
+            type: "conversation_history.get_status.response",
+            payload: { requestId: msg.requestId, ...(await this.conversationHistory.getStatus()) },
+          });
+          return;
+        case "conversation_history.browse.request":
+          this.emit({
+            type: "conversation_history.browse.response",
+            payload: { requestId: msg.requestId, ...(await this.conversationHistory.browse(msg)) },
+          });
+          return;
+        case "conversation_history.get_detail.request":
+          this.emit({
+            type: "conversation_history.get_detail.response",
+            payload: {
+              requestId: msg.requestId,
+              ...(await this.conversationHistory.detail(
+                msg.conversationId,
+                msg.cursor,
+                msg.limit,
+                msg.eventId,
+              )),
+            },
+          });
+          return;
+        case "conversation_history.rescan.request":
+          this.emit({
+            type: "conversation_history.rescan.response",
+            payload: {
+              requestId: msg.requestId,
+              accepted: await this.conversationHistory.rescan(),
+            },
+          });
+          return;
+        case "conversation_history.clear.request":
+          this.emit({
+            type: "conversation_history.clear.response",
+            payload: { requestId: msg.requestId, cleared: await this.conversationHistory.clear() },
+          });
+          return;
+        default:
+          return;
+      }
+    } catch (error) {
+      if (!(error instanceof ConversationHistoryError)) throw error;
+      this.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: "requestId" in msg ? String(msg.requestId) : "",
+          requestType: msg.type,
+          error: error.message,
+          code: error.code,
+        },
+      });
+    }
   }
 
   private dispatchVoiceAndControlMessage(msg: SessionInboundMessage): Promise<void> | undefined {

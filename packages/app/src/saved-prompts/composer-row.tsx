@@ -19,7 +19,7 @@ import { buttonIconSize } from "@/components/ui/control-geometry";
 import { useIsCompactFormFactor } from "@/constants/layout";
 import { isWeb } from "@/constants/platform";
 import { SPACING, type Theme } from "@/styles/theme";
-import type { SavedPrompt } from "./model";
+import { planSavedPromptComposerDismiss, type SavedPrompt } from "./model";
 
 const REVEAL_DURATION_MS = 160;
 const foregroundIconMapping = (theme: Theme) => ({ color: theme.colors.foreground });
@@ -29,7 +29,6 @@ const ThemedChevronRight = withUnistyles(ChevronRight);
 interface SavedPromptButtonProps {
   prompt: SavedPrompt;
   disabled: boolean;
-  compact: boolean;
   onPrepareSelect: () => void;
   onSelect: (prompt: SavedPrompt) => void;
 }
@@ -37,7 +36,6 @@ interface SavedPromptButtonProps {
 function SavedPromptButton({
   prompt,
   disabled,
-  compact,
   onPrepareSelect,
   onSelect,
 }: SavedPromptButtonProps): ReactElement {
@@ -54,7 +52,7 @@ function SavedPromptButton({
   return (
     <Button
       variant="secondary"
-      size={compact ? "md" : "xs"}
+      size="xs"
       onPressIn={handlePressIn}
       onPress={handlePress}
       disabled={disabled}
@@ -94,7 +92,7 @@ export function SavedPromptComposerRow({
     [compact],
   );
   const triggerLabel = t("settings.sections.savedPrompts");
-  const triggerSize = compact ? "md" : "xs";
+  const triggerSize = "xs";
   const promptDisabled = automaticSending && !canAutomaticSend;
   const triggerAccessibilityState = useMemo(() => ({ expanded }), [expanded]);
   const triggerWebProps = useMemo(
@@ -114,8 +112,15 @@ export function SavedPromptComposerRow({
 
   const collapseAndRestoreFocus = useCallback(() => {
     setExpanded(false);
-    onRequestComposerFocus();
-  }, [onRequestComposerFocus]);
+    const plan = planSavedPromptComposerDismiss({
+      automaticSending,
+      canSend: canAutomaticSend,
+      reason: "escape",
+    });
+    if (plan.requestComposerFocus) {
+      onRequestComposerFocus();
+    }
+  }, [automaticSending, canAutomaticSend, onRequestComposerFocus]);
 
   const handleSelect = useCallback(
     (prompt: SavedPrompt) => {
@@ -239,7 +244,6 @@ export function SavedPromptComposerRow({
               <SavedPromptButton
                 key={prompt.id}
                 prompt={prompt}
-                compact={compact}
                 onPrepareSelect={onPrepareSelect}
                 disabled={promptDisabled}
                 onSelect={handleSelect}

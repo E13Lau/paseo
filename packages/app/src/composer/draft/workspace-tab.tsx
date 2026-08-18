@@ -712,6 +712,7 @@ export function WorkspaceDraftAgentTab({
           commandDraftConfig={composerState.commandDraftConfig}
           agentControls={composerAgentControls}
           isCompactLayout={isCompactComposerLayout}
+          savedPromptsEnabled
         />
       </ReanimatedAnimated.View>
     </FileDropZone>

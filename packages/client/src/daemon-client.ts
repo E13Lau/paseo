@@ -103,6 +103,10 @@ import type {
   WorkspaceRecoveryState,
 } from "@getpaseo/protocol/messages";
 import type {
+  ConversationHistoryBrowseRequest,
+  ConversationHistoryProviderId,
+} from "@getpaseo/protocol/conversation-history/rpc-schemas";
+import type {
   AgentPermissionRequest,
   AgentPermissionResponse,
   AgentPersistenceHandle,
@@ -4537,6 +4541,77 @@ export class DaemonClient {
         type: "get_daemon_config_request",
       },
       responseType: "get_daemon_config_response",
+    });
+  }
+
+  async getConversationHistorySettings(requestId?: string) {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "conversation_history.get_settings.request" },
+      responseType: "conversation_history.get_settings.response",
+    });
+  }
+
+  async setConversationHistorySettings(
+    enabled: boolean,
+    providers: ConversationHistoryProviderId[],
+    requestId?: string,
+  ) {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "conversation_history.set_settings.request", enabled, providers },
+      responseType: "conversation_history.set_settings.response",
+    });
+  }
+
+  async getConversationHistoryStatus(requestId?: string) {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "conversation_history.get_status.request" },
+      responseType: "conversation_history.get_status.response",
+    });
+  }
+
+  async browseConversationHistory(
+    options: Omit<ConversationHistoryBrowseRequest, "type" | "requestId"> = {},
+    requestId?: string,
+  ) {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "conversation_history.browse.request", ...options },
+      responseType: "conversation_history.browse.response",
+    });
+  }
+
+  async getConversationHistoryDetail(
+    conversationId: string,
+    options: { eventId?: string; cursor?: string; limit?: number } = {},
+    requestId?: string,
+  ) {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: {
+        type: "conversation_history.get_detail.request",
+        conversationId,
+        ...options,
+      },
+      responseType: "conversation_history.get_detail.response",
+    });
+  }
+
+  async rescanConversationHistory(requestId?: string) {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "conversation_history.rescan.request" },
+      responseType: "conversation_history.rescan.response",
+    });
+  }
+
+  async clearConversationHistory(requestId?: string) {
+    return this.sendCorrelatedSessionRequest({
+      requestId,
+      message: { type: "conversation_history.clear.request" },
+      responseType: "conversation_history.clear.response",
     });
   }
 

@@ -64,6 +64,7 @@ import { MobilePanelOverlay } from "@/mobile-panels/presentation";
 import { useIsMobilePanelPresented } from "@/mobile-panels/provider";
 import {
   buildOpenProjectRoute,
+  buildHostHistoryRoute,
   buildNewWorkspaceRoute,
   buildSchedulesRoute,
   buildSessionsRoute,
@@ -420,12 +421,9 @@ function SidebarHostPicker({
   const triggerRef = useRef<View | null>(null);
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleSelect = useCallback(
-    (id: string) => {
-      onOpenHostSettings(id);
-    },
-    [onOpenHostSettings],
-  );
+  const handleSelect = useCallback((id: string) => {
+    router.push(buildHostHistoryRoute(id));
+  }, []);
 
   const handleOpen = useCallback(() => setIsOpen(true), []);
 

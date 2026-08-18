@@ -447,6 +447,7 @@ function resolveProfileLists(persisted: ReturnType<typeof loadPersistedConfig>) 
   return {
     terminalProfiles: persisted.daemon?.terminalProfiles,
     agentProfiles: persisted.daemon?.agentProfiles,
+    conversationHistory: persisted.daemon?.conversationHistory,
   };
 }
 
@@ -492,6 +493,7 @@ export function loadConfig(
     appendSystemPrompt,
     terminalProfiles,
     agentProfiles,
+    conversationHistory,
     hostnames,
     trustedProxies,
     appBaseUrl,
@@ -534,6 +536,7 @@ export function loadConfig(
     appendSystemPrompt,
     terminalProfiles,
     agentProfiles,
+    conversationHistory,
     mcpDebug: env.MCP_DEBUG === "1",
     isDev: resolvePaseoNodeEnv(env) === "development",
     agentStoragePath: path.join(paseoHome, "agents"),

@@ -70,6 +70,7 @@ import { ICON_SIZE } from "@/styles/theme";
 import type { Theme } from "@/styles/theme";
 import { getProviderIcon } from "@/components/provider-icons";
 import { BrowserToolsOptInCard } from "./browser-tools-card";
+import { ConversationHistorySettingsSection } from "./conversation-history-section";
 import { hasDaemonReconnectedAfter, type DaemonConnectionMarker } from "./daemon-reconnect";
 import { restartDaemonFromSettings } from "./daemon-restart";
 
@@ -375,6 +376,8 @@ export function HostSettingsPage({
       <HostStatusBadges serverId={serverId} />
 
       <HostAppearanceSection host={host} />
+
+      <ConversationHistorySettingsSection serverId={serverId} />
 
       {isLocalDaemon ? <LocalDaemonSection /> : null}
 

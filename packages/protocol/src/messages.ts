@@ -59,6 +59,11 @@ import {
 } from "./browser-automation/rpc-schemas.js";
 import { BrowserAutomationHostCapabilitySchema } from "./browser-automation/capabilities.js";
 import {
+  ConversationHistoryInboundSchemas,
+  ConversationHistoryOutboundSchemas,
+} from "./conversation-history/rpc-schemas.js";
+export * from "./conversation-history/rpc-schemas.js";
+import {
   PaseoConfigRawSchema,
   PaseoLifecycleCommandRawSchema,
   PaseoMetadataGenerationEntrySchema,
@@ -190,6 +195,12 @@ export const MutableDaemonConfigSchema = z
     appendSystemPrompt: z.string().default(""),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    conversationHistory: z
+      .object({
+        enabled: z.boolean().default(false),
+        providers: z.array(z.enum(["claude", "codex", "pi", "omp"])).default([]),
+      })
+      .optional(),
   })
   .passthrough();
 
@@ -208,6 +219,7 @@ export const MutableDaemonConfigPatchSchema = z
     appendSystemPrompt: z.string().optional(),
     terminalProfiles: z.array(TerminalProfileSchema).optional(),
     agentProfiles: z.array(AgentProfileSchema).optional(),
+    conversationHistory: MutableDaemonConfigSchema.shape.conversationHistory.optional(),
   })
   .partial()
   .passthrough();
@@ -2727,6 +2739,7 @@ export const HubExecutionControlRequestSchema = z.object({
 export type HubExecutionControlRequest = z.infer<typeof HubExecutionControlRequestSchema>;
 
 export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
+  ...ConversationHistoryInboundSchemas,
   HubExecutionAgentCreateRequestSchema,
   HubExecutionAgentValidateRequestSchema,
   HubExecutionControlRequestSchema,
@@ -3173,6 +3186,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentProfiles: z.boolean().optional(),
         // COMPAT(agentConfigApply): added in v0.3.2, remove gate after 2027-02-11.
         agentConfigApply: z.boolean().optional(),
+        // COMPAT(conversationHistory): added in v0.5.0, remove gate after 2027-08-18.
+        conversationHistory: z.boolean().optional(),
       })
       .optional(),
   })
@@ -5708,6 +5723,7 @@ export function parseHubExecutionOutboundMessage(value: unknown): HubExecutionOu
 export type DaemonUpdateProgressMessage = z.infer<typeof DaemonUpdateProgressMessageSchema>;
 
 export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
+  ...ConversationHistoryOutboundSchemas,
   HubExecutionAgentCreateResponseSchema,
   HubExecutionAgentValidateResponseSchema,
   HubExecutionControlResponseSchema,

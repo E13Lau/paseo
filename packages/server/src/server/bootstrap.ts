@@ -398,6 +398,7 @@ export interface PaseoDaemonConfig {
   appendSystemPrompt?: string;
   terminalProfiles?: TerminalProfile[];
   agentProfiles?: AgentProfile[];
+  conversationHistory?: MutableDaemonConfig["conversationHistory"];
   staticDir: string;
   mcpDebug: boolean;
   isDev?: boolean;
@@ -540,6 +541,10 @@ function createInitialMutableDaemonConfig(config: PaseoDaemonConfig): MutableDae
 
   if (config.agentProfiles !== undefined) {
     initialConfig.agentProfiles = config.agentProfiles;
+  }
+
+  if (config.conversationHistory !== undefined) {
+    initialConfig.conversationHistory = config.conversationHistory;
   }
 
   return initialConfig;

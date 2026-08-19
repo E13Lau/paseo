@@ -30,6 +30,7 @@ interface LiveSocket {
   remote: HostTunnelStream | null;
   localEnded: boolean;
   remoteEnded: boolean;
+  opened: boolean;
 }
 
 interface HostRuntime {
@@ -44,6 +45,7 @@ export class PortForwardManager {
   private readonly forwards = new Map<string, LiveForward>();
   private readonly hosts = new Map<string, HostRuntime>();
   private readonly listeners = new Set<(snapshots: PortForwardSnapshot[]) => void>();
+  private readonly mutations = new Map<string, Promise<unknown>>();
   private started = false;
 
   constructor(input: {
@@ -85,131 +87,64 @@ export class PortForwardManager {
     const host = this.hosts.get(serverId) ?? { candidates: [], tunnel: null };
     host.candidates = candidates;
     this.hosts.set(serverId, host);
+    host.tunnel?.setCandidates(candidates);
     this.reconcileHostTunnel(serverId);
     this.emit();
   }
 
   async create(input: PortForwardCreateInput): Promise<PortForwardSnapshot> {
-    const target = parsePortForwardTarget(input.target);
-    const duplicate = [...this.forwards.values()].find(
-      (forward) =>
-        forward.definition.serverId === input.serverId &&
-        forward.definition.targetHost === target.host &&
-        forward.definition.targetPort === target.port,
-    );
-    if (duplicate) {
-      throw new Error("A Port Forward already exists for this Host target");
-    }
-    const preferredLocalPort = input.localPort ?? target.port;
-    const definition: PortForwardDefinition = {
-      id: randomUUID(),
-      serverId: input.serverId,
-      targetHost: target.host,
-      targetPort: target.port,
-      label: input.label?.trim() ?? "",
-      preferredLocalPort,
-      requireLocalPort: input.requireLocalPort === true,
-      openAs: input.openAs ?? "none",
-    };
-    let live: LiveForward;
-    try {
-      live = await this.bindDefinition(definition);
-    } catch (error) {
-      if (definition.requireLocalPort) {
-        throw new Error("Required local port is unavailable", { cause: error });
-      }
-      throw error;
-    }
-    this.forwards.set(live.definition.id, live);
-    await this.store.save(live.definition);
-    this.reconcileHostTunnel(input.serverId);
-    this.emit();
-    return toSnapshot(live);
+    return this.enqueue(input.serverId, () => this.createLocked(input));
   }
 
   async update(input: PortForwardUpdateInput): Promise<PortForwardSnapshot> {
     const live = this.requireForward(input.id);
-    const nextTarget = input.target
-      ? parsePortForwardTarget(input.target)
-      : {
-          host: live.definition.targetHost,
-          port: live.definition.targetPort,
-        };
-    const nextRequire = input.requireLocalPort ?? live.definition.requireLocalPort;
-    const nextLocalPort = input.localPort ?? live.definition.preferredLocalPort;
-    const transportChanged =
-      nextTarget.host !== live.definition.targetHost ||
-      nextTarget.port !== live.definition.targetPort ||
-      nextLocalPort !== live.definition.preferredLocalPort;
-
-    if (!transportChanged) {
-      live.definition = {
-        ...live.definition,
-        label: input.label ?? live.definition.label,
-        openAs: input.openAs ?? live.definition.openAs,
-        requireLocalPort: nextRequire,
-      };
-      await this.store.save(live.definition);
-      this.emit();
-      return toSnapshot(live);
-    }
-
-    const replacement: PortForwardDefinition = {
-      ...live.definition,
-      targetHost: nextTarget.host,
-      targetPort: nextTarget.port,
-      label: input.label ?? live.definition.label,
-      preferredLocalPort: nextLocalPort,
-      requireLocalPort: nextRequire,
-      openAs: input.openAs ?? live.definition.openAs,
-    };
-    const nextLive = await this.bindDefinition(replacement);
-    await this.closeLive(live, false);
-    this.forwards.set(nextLive.definition.id, nextLive);
-    await this.store.save(nextLive.definition);
-    this.reconcileHostTunnel(nextLive.definition.serverId);
-    this.emit();
-    return toSnapshot(nextLive);
+    return this.enqueue(live.definition.serverId, () => this.updateLocked(input));
   }
 
   async stop(id: string): Promise<void> {
     const live = this.requireForward(id);
-    await this.closeLive(live, true);
-    await this.store.remove(id);
-    this.reconcileHostTunnel(live.definition.serverId);
-    this.emit();
+    await this.enqueue(live.definition.serverId, async () => {
+      await this.closeLive(live, true);
+      await this.store.remove(id);
+      this.reconcileHostTunnel(live.definition.serverId);
+      this.emit();
+    });
   }
 
   async removeHost(serverId: string): Promise<void> {
-    const hosted: LiveForward[] = [];
-    for (const live of this.forwards.values()) {
-      if (live.definition.serverId === serverId) {
-        hosted.push(live);
+    await this.enqueue(serverId, async () => {
+      const hosted: LiveForward[] = [];
+      for (const live of this.forwards.values()) {
+        if (live.definition.serverId === serverId) {
+          hosted.push(live);
+        }
       }
-    }
-    for (const live of hosted) {
-      await this.closeLive(live, true);
-    }
-    this.hosts.get(serverId)?.tunnel?.close();
-    this.hosts.delete(serverId);
-    await this.store.removeHost(serverId);
-    this.emit();
+      for (const live of hosted) {
+        await this.closeLive(live, true);
+      }
+      this.hosts.get(serverId)?.tunnel?.close();
+      this.hosts.delete(serverId);
+      await this.store.removeHost(serverId);
+      this.emit();
+    });
   }
 
   async rekeyHost(oldServerId: string, newServerId: string): Promise<void> {
-    for (const live of this.forwards.values()) {
-      if (live.definition.serverId === oldServerId) {
-        live.definition = { ...live.definition, serverId: newServerId };
+    await this.enqueue(oldServerId, async () => {
+      for (const live of this.forwards.values()) {
+        if (live.definition.serverId === oldServerId) {
+          live.definition = { ...live.definition, serverId: newServerId };
+        }
       }
-    }
-    const host = this.hosts.get(oldServerId);
-    if (host) {
-      this.hosts.delete(oldServerId);
-      this.hosts.set(newServerId, host);
-    }
-    await this.store.rekeyHost(oldServerId, newServerId);
-    this.reconcileHostTunnel(newServerId);
-    this.emit();
+      const host = this.hosts.get(oldServerId);
+      if (host) {
+        this.hosts.delete(oldServerId);
+        this.hosts.set(newServerId, host);
+      }
+      await this.store.rekeyHost(oldServerId, newServerId);
+      this.reconcileHostTunnel(newServerId);
+      this.emit();
+    });
   }
 
   async dispose(): Promise<void> {
@@ -228,14 +163,110 @@ export class PortForwardManager {
 
   async retry(id: string): Promise<PortForwardSnapshot> {
     const live = this.requireForward(id);
-    if (live.binding) {
-      live.state = this.hostState(live.definition.serverId);
+    return this.enqueue(live.definition.serverId, async () => {
+      if (live.binding) {
+        live.state = this.hostState(live.definition.serverId);
+        this.emit();
+        return toSnapshot(live);
+      }
+      const next = await this.installDefinition(live.definition, live.definition.id);
+      this.emit();
+      return toSnapshot(next);
+    });
+  }
+
+  private async createLocked(input: PortForwardCreateInput): Promise<PortForwardSnapshot> {
+    const target = parsePortForwardTarget(input.target);
+    this.assertUniqueTarget(input.serverId, target.host, target.port);
+    const preferredLocalPort = input.localPort ?? target.port;
+    const definition: PortForwardDefinition = {
+      id: randomUUID(),
+      serverId: input.serverId,
+      targetHost: target.host,
+      targetPort: target.port,
+      label: input.label?.trim() ?? "",
+      preferredLocalPort,
+      requireLocalPort: input.requireLocalPort === true,
+      openAs: input.openAs ?? "none",
+    };
+    this.forwards.set(definition.id, reservedForward(definition));
+    try {
+      const live = await this.bindDefinition(definition);
+      this.forwards.set(live.definition.id, live);
+      await this.store.save(live.definition);
+      this.reconcileHostTunnel(input.serverId);
+      this.emit();
+      return toSnapshot(live);
+    } catch (error) {
+      this.forwards.delete(definition.id);
+      if (definition.requireLocalPort) {
+        throw new Error("Required local port is unavailable", { cause: error });
+      }
+      throw error;
+    }
+  }
+
+  private async updateLocked(input: PortForwardUpdateInput): Promise<PortForwardSnapshot> {
+    const live = this.requireForward(input.id);
+    const nextTarget = input.target
+      ? parsePortForwardTarget(input.target)
+      : {
+          host: live.definition.targetHost,
+          port: live.definition.targetPort,
+        };
+    const nextRequire = input.requireLocalPort ?? live.definition.requireLocalPort;
+    const nextLocalPort = input.localPort ?? live.definition.preferredLocalPort;
+    const targetChanged =
+      nextTarget.host !== live.definition.targetHost ||
+      nextTarget.port !== live.definition.targetPort;
+    const localPortChanged = nextLocalPort !== live.definition.preferredLocalPort;
+    const strictnessChanged = nextRequire !== live.definition.requireLocalPort;
+    const transportChanged = targetChanged || localPortChanged || strictnessChanged;
+
+    if (targetChanged) {
+      this.assertUniqueTarget(
+        live.definition.serverId,
+        nextTarget.host,
+        nextTarget.port,
+        live.definition.id,
+      );
+    }
+
+    const replacement: PortForwardDefinition = {
+      ...live.definition,
+      targetHost: nextTarget.host,
+      targetPort: nextTarget.port,
+      label: input.label ?? live.definition.label,
+      preferredLocalPort: nextLocalPort,
+      requireLocalPort: nextRequire,
+      openAs: input.openAs ?? live.definition.openAs,
+    };
+
+    if (!transportChanged) {
+      live.definition = replacement;
+      await this.store.save(live.definition);
       this.emit();
       return toSnapshot(live);
     }
-    const next = await this.installDefinition(live.definition, live.definition.id);
+
+    const sameBoundPort = live.binding !== null && live.localPort === nextLocalPort;
+    if (sameBoundPort) {
+      if (targetChanged) {
+        this.closeLiveSockets(live);
+      }
+      live.definition = replacement;
+      await this.store.save(live.definition);
+      this.emit();
+      return toSnapshot(live);
+    }
+
+    const nextLive = await this.bindDefinition(replacement);
+    await this.closeLive(live, false);
+    this.forwards.set(nextLive.definition.id, nextLive);
+    await this.store.save(nextLive.definition);
+    this.reconcileHostTunnel(nextLive.definition.serverId);
     this.emit();
-    return toSnapshot(next);
+    return toSnapshot(nextLive);
   }
 
   private async restoreDefinition(definition: PortForwardDefinition): Promise<void> {
@@ -311,11 +342,13 @@ export class PortForwardManager {
 
   private acceptConnection(live: LiveForward, socket: Socket): void {
     socket.setNoDelay(true);
+    socket.pause();
     const tracked: LiveSocket = {
       local: socket,
       remote: null,
       localEnded: false,
       remoteEnded: false,
+      opened: false,
     };
     live.sockets.add(tracked);
 
@@ -337,12 +370,18 @@ export class PortForwardManager {
       port: live.definition.targetPort,
     });
     tracked.remote = remote;
-    pipeLocalToRemote(tracked, () => this.emit());
+    attachLocalBridge(tracked, () => this.emit());
     remote.onData((data) => {
-      if (!socket.write(data)) {
+      const wrote = socket.write(data);
+      if (!wrote) {
         socket.pause();
-        socket.once("drain", () => socket.resume());
+        socket.once("drain", () => {
+          remote.acknowledgeInbound();
+          socket.resume();
+        });
+        return;
       }
+      remote.acknowledgeInbound();
     });
     remote.onHalfClose(() => {
       tracked.remoteEnded = true;
@@ -355,7 +394,6 @@ export class PortForwardManager {
       live.sockets.delete(tracked);
       this.emit();
     });
-    remote.onWindowAvailable(() => socket.resume());
   }
 
   private maybeReleaseSocket(live: LiveForward, tracked: LiveSocket): void {
@@ -365,16 +403,20 @@ export class PortForwardManager {
   }
 
   private async closeLive(live: LiveForward, remove: boolean): Promise<void> {
-    for (const tracked of live.sockets) {
-      tracked.remote?.reset();
-      tracked.local.resetAndDestroy();
-    }
-    live.sockets.clear();
+    this.closeLiveSockets(live);
     await live.binding?.close();
     live.binding = null;
     if (remove) {
       this.forwards.delete(live.definition.id);
     }
+  }
+
+  private closeLiveSockets(live: LiveForward): void {
+    for (const tracked of live.sockets) {
+      tracked.remote?.reset();
+      tracked.local.resetAndDestroy();
+    }
+    live.sockets.clear();
   }
 
   private reconcileHostTunnel(serverId: string): void {
@@ -389,6 +431,7 @@ export class PortForwardManager {
       return;
     }
     if (host.tunnel) {
+      host.tunnel.setCandidates(host.candidates);
       this.applyHostState(serverId, host.tunnel.state);
       return;
     }
@@ -410,11 +453,7 @@ export class PortForwardManager {
       }
       live.state = tunnelStateToForwardState(tunnelState);
       if (tunnelState === "disconnected") {
-        for (const tracked of live.sockets) {
-          tracked.remote?.reset();
-          tracked.local.resetAndDestroy();
-        }
-        live.sockets.clear();
+        this.closeLiveSockets(live);
       }
     }
   }
@@ -432,12 +471,57 @@ export class PortForwardManager {
     return live;
   }
 
+  private assertUniqueTarget(
+    serverId: string,
+    host: string,
+    port: number,
+    exceptId?: string,
+  ): void {
+    const duplicate = [...this.forwards.values()].find((forward) => {
+      if (exceptId && forward.definition.id === exceptId) {
+        return false;
+      }
+      return (
+        forward.definition.serverId === serverId &&
+        forward.definition.targetHost === host &&
+        forward.definition.targetPort === port
+      );
+    });
+    if (duplicate) {
+      throw new Error("A Port Forward already exists for this Host target");
+    }
+  }
+
+  private enqueue<T>(serverId: string, operation: () => Promise<T>): Promise<T> {
+    const previous = this.mutations.get(serverId) ?? Promise.resolve();
+    const next = previous.then(operation, operation);
+    this.mutations.set(
+      serverId,
+      next.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return next;
+  }
+
   private emit(): void {
     const snapshots = this.snapshots();
     for (const listener of this.listeners) {
       listener(snapshots);
     }
   }
+}
+
+function reservedForward(definition: PortForwardDefinition): LiveForward {
+  return {
+    definition,
+    state: "starting",
+    localPort: null,
+    binding: null,
+    recentError: null,
+    sockets: new Set(),
+  };
 }
 
 function tunnelStateToForwardState(state: HostTunnelHandle["state"]): PortForwardState {
@@ -467,20 +551,35 @@ function toSnapshot(live: LiveForward): PortForwardSnapshot {
   };
 }
 
-function pipeLocalToRemote(tracked: LiveSocket, onChange: () => void): void {
+function attachLocalBridge(tracked: LiveSocket, onChange: () => void): void {
   const remote = tracked.remote;
   if (!remote) {
     return;
   }
-  tracked.local.on("data", (chunk: Buffer) => {
-    const accepted = remote.write(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
-    if (!accepted) {
-      tracked.local.pause();
+  const pending: Buffer[] = [];
+
+  function flushPending(): void {
+    for (const chunk of pending) {
+      writeLocalChunk(tracked, chunk);
     }
+    pending.length = 0;
+    if (tracked.localEnded) {
+      tracked.remote?.halfClose();
+    }
+  }
+
+  tracked.local.on("data", (chunk: Buffer) => {
+    if (!tracked.opened) {
+      pending.push(chunk);
+      return;
+    }
+    writeLocalChunk(tracked, chunk);
   });
   tracked.local.on("end", () => {
     tracked.localEnded = true;
-    remote.halfClose();
+    if (tracked.opened) {
+      remote.halfClose();
+    }
     onChange();
   });
   tracked.local.on("error", () => {
@@ -491,6 +590,24 @@ function pipeLocalToRemote(tracked: LiveSocket, onChange: () => void): void {
       remote.reset();
     }
   });
+  remote.onWindowAvailable(() => {
+    if (!tracked.opened) {
+      tracked.opened = true;
+      flushPending();
+    }
+    tracked.local.resume();
+  });
+}
+
+function writeLocalChunk(tracked: LiveSocket, chunk: Buffer): void {
+  const remote = tracked.remote;
+  if (!remote) {
+    return;
+  }
+  const accepted = remote.write(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
+  if (!accepted) {
+    tracked.local.pause();
+  }
 }
 
 export type { PortForwardOpenAs };

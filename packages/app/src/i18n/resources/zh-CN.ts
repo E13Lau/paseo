@@ -2183,6 +2183,7 @@ export const zhCN: TranslationResources = {
         retry: "重试",
         noAddress: "无地址",
         updateHost: "需要更新 Host",
+        loopbackHint: "本地进程可以使用该监听端口。环回地址是访问边界。",
         unknownCapability: "请连接到此 Host 以使用 Port Forward。",
         actionFailed: "无法更新端口转发",
         recentError: "最近连接：{{category}}",

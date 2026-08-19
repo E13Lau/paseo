@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { Pressable, Text, View } from "react-native";
 import { useTranslation } from "react-i18next";
 import * as Clipboard from "expo-clipboard";
@@ -41,6 +48,8 @@ export function PortsSection({ serverId }: { serverId: string }) {
     seed?: { target: string; label: string; openAs?: "none" | "http" | "https" };
   } | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<"save" | "stop" | "retry" | null>(null);
+  const pendingActionRef = useRef(false);
   const isConnected = useHostRuntimeIsConnected(serverId);
   const feature = useSessionStore(
     (state) => state.sessions[serverId]?.serverInfo?.features?.portForward,
@@ -118,6 +127,9 @@ export function PortsSection({ serverId }: { serverId: string }) {
 
   const handleStop = useCallback(
     async (id: string) => {
+      if (pendingActionRef.current) return;
+      pendingActionRef.current = true;
+      setPendingAction("stop");
       setActionError(null);
       try {
         await stopPortForward(id);
@@ -125,6 +137,9 @@ export function PortsSection({ serverId }: { serverId: string }) {
         setActionError(
           error instanceof Error ? error.message : t("settings.host.ports.actionFailed"),
         );
+      } finally {
+        pendingActionRef.current = false;
+        setPendingAction(null);
       }
     },
     [t],
@@ -132,6 +147,9 @@ export function PortsSection({ serverId }: { serverId: string }) {
 
   const handleRetry = useCallback(
     async (id: string) => {
+      if (pendingActionRef.current) return;
+      pendingActionRef.current = true;
+      setPendingAction("retry");
       setActionError(null);
       try {
         await retryPortForward(id);
@@ -139,6 +157,9 @@ export function PortsSection({ serverId }: { serverId: string }) {
         setActionError(
           error instanceof Error ? error.message : t("settings.host.ports.actionFailed"),
         );
+      } finally {
+        pendingActionRef.current = false;
+        setPendingAction(null);
       }
     },
     [t],
@@ -154,8 +175,10 @@ export function PortsSection({ serverId }: { serverId: string }) {
   }, [form]);
 
   const handleSubmitForm = useCallback(async () => {
-    if (!form) return;
+    if (!form || pendingActionRef.current) return;
     const state = form.model.getState();
+    pendingActionRef.current = true;
+    setPendingAction("save");
     setActionError(null);
     try {
       if (form.mode === "create") {
@@ -183,6 +206,9 @@ export function PortsSection({ serverId }: { serverId: string }) {
       setActionError(
         error instanceof Error ? error.message : t("settings.host.ports.actionFailed"),
       );
+    } finally {
+      pendingActionRef.current = false;
+      setPendingAction(null);
     }
   }, [form, serverId, t]);
 
@@ -190,6 +216,9 @@ export function PortsSection({ serverId }: { serverId: string }) {
     <SettingsGroup title={t("settings.host.ports.title")} testID="host-ports-group">
       <SettingsSection title={t("settings.host.ports.sectionTitle")} flush>
         <View style={settingsStyles.card} testID="host-ports-card">
+          <Text style={styles.hint} testID="host-ports-loopback-hint">
+            {t("settings.host.ports.loopbackHint")}
+          </Text>
           {capability === "unsupported" ? (
             <Text style={styles.hint} testID="host-ports-update-host">
               {t("settings.host.ports.updateHost")}
@@ -211,12 +240,13 @@ export function PortsSection({ serverId }: { serverId: string }) {
               onStop={handleStop}
               onRetry={handleRetry}
               onEdit={setForm}
+              actionsDisabled={pendingAction !== null}
             />
           ))}
           <Button
             variant="secondary"
             size="sm"
-            disabled={capability !== "supported"}
+            disabled={capability !== "supported" || pendingAction !== null}
             testID="host-ports-add"
             onPress={handleAdd}
           >
@@ -233,6 +263,7 @@ export function PortsSection({ serverId }: { serverId: string }) {
         <PortForwardFormSheet
           header={formHeader}
           model={form.model}
+          pending={pendingAction === "save"}
           onClose={handleCloseForm}
           onSubmit={handleSubmitForm}
         />
@@ -244,11 +275,13 @@ export function PortsSection({ serverId }: { serverId: string }) {
 function PortForwardFormSheet({
   header,
   model,
+  pending,
   onClose,
   onSubmit,
 }: {
   header: SheetHeader;
   model: PortForwardFormModel;
+  pending: boolean;
   onClose: () => void;
   onSubmit: () => Promise<void>;
 }) {
@@ -311,7 +344,11 @@ function PortForwardFormSheet({
           options={openAsOptions}
         />
       </Field>
-      <Button disabled={!state.canSubmit} testID="host-ports-submit" onPress={handleSubmit}>
+      <Button
+        disabled={!state.canSubmit || pending}
+        testID="host-ports-submit"
+        onPress={handleSubmit}
+      >
         {t("settings.host.ports.save")}
       </Button>
     </AdaptiveModalSheet>
@@ -327,6 +364,7 @@ function ForwardRow({
   onStop,
   onRetry,
   onEdit,
+  actionsDisabled,
 }: {
   forward: PortForwardSnapshot;
   showBorder: boolean;
@@ -335,6 +373,7 @@ function ForwardRow({
   onOpen: (forward: PortForwardSnapshot) => Promise<void>;
   onStop: (id: string) => Promise<void>;
   onRetry: (id: string) => Promise<void>;
+  actionsDisabled: boolean;
   onEdit: React.Dispatch<
     React.SetStateAction<{
       mode: "create" | "edit";
@@ -402,11 +441,19 @@ function ForwardRow({
           <Text style={styles.action}>{t("settings.host.ports.edit")}</Text>
         </Pressable>
         {forward.state === "error" || forward.state === "port_unavailable" ? (
-          <Pressable onPress={handleRetry} testID={`host-ports-retry-${forward.id}`}>
+          <Pressable
+            onPress={handleRetry}
+            disabled={actionsDisabled}
+            testID={`host-ports-retry-${forward.id}`}
+          >
             <Text style={styles.action}>{t("settings.host.ports.retry")}</Text>
           </Pressable>
         ) : null}
-        <Pressable onPress={handleStop} testID={`host-ports-stop-${forward.id}`}>
+        <Pressable
+          onPress={handleStop}
+          disabled={actionsDisabled}
+          testID={`host-ports-stop-${forward.id}`}
+        >
           <Text style={styles.action}>{t("settings.host.ports.stop")}</Text>
         </Pressable>
       </View>

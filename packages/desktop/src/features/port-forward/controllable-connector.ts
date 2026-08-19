@@ -1,5 +1,10 @@
 import { EventEmitter } from "node:events";
-import type { HostTunnelConnector, HostTunnelHandle, HostTunnelStream } from "./types.js";
+import type {
+  HostConnectionCandidate,
+  HostTunnelConnector,
+  HostTunnelHandle,
+  HostTunnelStream,
+} from "./types.js";
 
 export class ControllableHostTunnelStream implements HostTunnelStream {
   readonly streamId: number;
@@ -29,6 +34,12 @@ export class ControllableHostTunnelStream implements HostTunnelStream {
 
   reset(): void {
     this.resetCategory = "reset";
+  }
+
+  acknowledgeInbound(): void {}
+
+  emitReady(): void {
+    for (const listener of this.windowListeners) listener();
   }
 
   onData(cb: (data: Uint8Array) => void): void {
@@ -70,11 +81,16 @@ export class ControllableHostTunnelStream implements HostTunnelStream {
 export class ControllableHostTunnelHandle implements HostTunnelHandle {
   state: HostTunnelHandle["state"] = "connecting";
   streams: ControllableHostTunnelStream[] = [];
+  candidates: HostConnectionCandidate[] = [];
   closed = false;
   private nextStreamId = 1;
   private readonly emitter = new EventEmitter();
 
   constructor(private readonly onStateChange: (state: HostTunnelHandle["state"]) => void) {}
+
+  setCandidates(candidates: HostConnectionCandidate[]): void {
+    this.candidates = candidates;
+  }
 
   setState(state: HostTunnelHandle["state"]): void {
     this.state = state;
@@ -107,10 +123,11 @@ export class ControllableHostTunnelConnector implements HostTunnelConnector {
 
   connect(input: {
     serverId: string;
-    candidates: unknown[];
+    candidates: HostConnectionCandidate[];
     onStateChange: (state: HostTunnelHandle["state"]) => void;
   }): HostTunnelHandle {
     const handle = new ControllableHostTunnelHandle(input.onStateChange);
+    handle.setCandidates(input.candidates);
     this.handles.push(handle);
     return handle;
   }

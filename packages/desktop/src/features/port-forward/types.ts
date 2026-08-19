@@ -74,6 +74,7 @@ export interface HostTunnelStream {
   write(data: Uint8Array): boolean;
   halfClose(): void;
   reset(): void;
+  acknowledgeInbound(): void;
   onData(cb: (data: Uint8Array) => void): void;
   onHalfClose(cb: () => void): void;
   onReset(cb: (category: string) => void): void;
@@ -83,6 +84,7 @@ export interface HostTunnelStream {
 export interface HostTunnelHandle {
   readonly state: "connecting" | "ready" | "update_host_required" | "disconnected";
   openStream(target: { host: string; port: number }): HostTunnelStream;
+  setCandidates(candidates: HostConnectionCandidate[]): void;
   close(): void;
 }
 

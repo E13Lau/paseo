@@ -2260,6 +2260,8 @@ export const fr: TranslationResources = {
         retry: "Réessayer",
         noAddress: "Pas d'adresse",
         updateHost: "Mise à jour du Host requise",
+        loopbackHint:
+          "Les processus locaux peuvent utiliser l'écouteur. La boucle locale est la limite d'accès.",
         unknownCapability: "Connectez-vous à ce Host pour utiliser Port Forward.",
         actionFailed: "Impossible de mettre à jour le transfert",
         recentError: "Dernière connexion : {{category}}",

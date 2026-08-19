@@ -2218,6 +2218,7 @@ export const ko: TranslationResources = {
         retry: "다시 시도",
         noAddress: "주소 없음",
         updateHost: "Host 업데이트가 필요합니다",
+        loopbackHint: "로컬 프로세스가 리스너를 사용할 수 있습니다. 루프백이 접근 경계입니다.",
         unknownCapability: "Port Forward를 쓰려면 이 Host에 연결하세요.",
         actionFailed: "포트 전달을 업데이트할 수 없습니다",
         recentError: "최근 연결: {{category}}",

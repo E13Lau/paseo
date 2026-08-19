@@ -10,9 +10,11 @@ import { createPortForwardStore } from "./store.js";
 
 const directories = new Set<string>();
 const sockets: net.Socket[] = [];
+const managers: PortForwardManager[] = [];
 
 afterEach(async () => {
   for (const socket of sockets.splice(0)) socket.destroy();
+  await Promise.all(managers.splice(0).map((manager) => manager.dispose()));
   await Promise.all(
     [...directories].map((directory) => rm(directory, { recursive: true, force: true })),
   );
@@ -41,6 +43,7 @@ describe("PortForwardManager", () => {
     await streamReady;
     const stream = connector.latest().streams[0];
     expect(stream.target).toEqual({ host: "localhost", port: 8080 });
+    stream.emitReady();
 
     const echoed = receive(local.ipv4);
     stream.emitData(new TextEncoder().encode("from-host"));
@@ -103,12 +106,14 @@ describe("PortForwardManager", () => {
     const store = createPortForwardStore({ userDataPath });
     const firstConnector = new ControllableHostTunnelConnector();
     const first = new PortForwardManager({ store, connector: firstConnector });
+    managers.push(first);
     await first.start();
     const created = await first.create({ serverId: "host-a", target: "9300", label: "api" });
     await first.dispose();
 
     const secondConnector = new ControllableHostTunnelConnector();
     const restored = new PortForwardManager({ store, connector: secondConnector });
+    managers.push(restored);
     await restored.start();
     const snapshot = restored.snapshots("host-a")[0];
     expect(snapshot?.localPort).toBe(created.localPort);
@@ -161,6 +166,84 @@ describe("PortForwardManager", () => {
     expect(manager.snapshots("old")).toEqual([]);
     expect(manager.snapshots("new")).toHaveLength(1);
   });
+
+  it("holds local bytes until the Host OpenResult is ready", async () => {
+    const { manager, connector } = await createManager();
+    const created = await manager.create({ serverId: "host-a", target: "9700" });
+    connector.latest().setState("ready");
+    const streamReady = new Promise<void>((resolve) => {
+      connector.latest().onOpen(() => resolve());
+    });
+    const local = connectBothFamilies(created.localPort ?? 0);
+    await streamReady;
+    const stream = connector.latest().streams[0];
+    local.ipv4.write("before-open");
+    await delay(30);
+    expect(stream.written).toEqual([]);
+    stream.emitReady();
+    await delay(30);
+    expect(Buffer.concat(stream.written.map((chunk) => Buffer.from(chunk))).toString()).toBe(
+      "before-open",
+    );
+  });
+
+  it("keeps the bound port when only the Host target changes", async () => {
+    const { manager, connector } = await createManager();
+    const created = await manager.create({ serverId: "host-a", target: "9800" });
+    connector.latest().setState("ready");
+    const streamReady = new Promise<void>((resolve) => {
+      connector.latest().onOpen(() => resolve());
+    });
+    connectBothFamilies(created.localPort ?? 0);
+    await streamReady;
+    const first = connector.latest().streams[0];
+    const updated = await manager.update({ id: created.id, target: "9801" });
+    expect(updated.localPort).toBe(created.localPort);
+    expect(updated.targetPort).toBe(9801);
+    expect(first.resetCategory).toBe("reset");
+
+    const nextReady = new Promise<void>((resolve) => {
+      connector.latest().onOpen(() => resolve());
+    });
+    connectBothFamilies(updated.localPort ?? 0);
+    await nextReady;
+    expect(connector.latest().streams.at(-1)?.target).toEqual({ host: "localhost", port: 9801 });
+  });
+
+  it("keeps the listener when only require-local-port changes", async () => {
+    const { manager } = await createManager();
+    const created = await manager.create({ serverId: "host-a", target: "9810" });
+    const updated = await manager.update({ id: created.id, requireLocalPort: true });
+    expect(updated.localPort).toBe(created.localPort);
+    expect(updated.requireLocalPort).toBe(true);
+    expect(await ping("127.0.0.1", updated.localPort ?? 0)).toBe(true);
+  });
+
+  it("serializes creates so one Host target stays unique", async () => {
+    const { manager } = await createManager();
+    const results = await Promise.allSettled([
+      manager.create({ serverId: "host-a", target: "9820" }),
+      manager.create({ serverId: "host-a", target: "9820" }),
+    ]);
+    const fulfilled = results.filter((result) => result.status === "fulfilled");
+    const rejected = results.filter((result) => result.status === "rejected");
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
+    expect(manager.snapshots("host-a")).toHaveLength(1);
+  });
+
+  it("updates the live tunnel candidate list without stacking handles", async () => {
+    const { manager, connector } = await createManager();
+    manager.syncHostCandidates("host-a", [
+      { id: "tcp-1", type: "directTcp", endpoint: "127.0.0.1:6767" },
+    ]);
+    await manager.create({ serverId: "host-a", target: "9830" });
+    expect(connector.handles).toHaveLength(1);
+    const next = [{ id: "tcp-2", type: "directTcp", endpoint: "127.0.0.1:6768", password: "p" }];
+    manager.syncHostCandidates("host-a", next);
+    expect(connector.handles).toHaveLength(1);
+    expect(connector.latest().candidates).toEqual(next);
+  });
 });
 
 async function createManager(): Promise<{
@@ -174,6 +257,7 @@ async function createManager(): Promise<{
     store: createPortForwardStore({ userDataPath }),
     connector,
   });
+  managers.push(manager);
   await manager.start();
   return { manager, connector };
 }

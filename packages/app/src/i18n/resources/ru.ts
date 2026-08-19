@@ -2244,6 +2244,8 @@ export const ru: TranslationResources = {
         retry: "Повторить",
         noAddress: "Нет адреса",
         updateHost: "Требуется обновление Host",
+        loopbackHint:
+          "Локальные процессы могут использовать слушатель. Loopback — граница доступа.",
         unknownCapability: "Подключитесь к этому Host, чтобы использовать Port Forward.",
         actionFailed: "Не удалось обновить проброс",
         recentError: "Последнее соединение: {{category}}",

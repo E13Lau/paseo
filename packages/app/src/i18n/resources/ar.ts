@@ -2206,6 +2206,7 @@ export const ar: TranslationResources = {
         retry: "إعادة المحاولة",
         noAddress: "لا يوجد عنوان",
         updateHost: "يلزم تحديث الـ Host",
+        loopbackHint: "يمكن للعمليات المحلية استخدام المستمع. العنوان الحلقي هو حد الوصول.",
         unknownCapability: "اتصل بهذا الـ Host لاستخدام Port Forward.",
         actionFailed: "تعذر تحديث إعادة التوجيه",
         recentError: "آخر اتصال: {{category}}",

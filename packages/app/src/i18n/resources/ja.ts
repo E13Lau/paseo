@@ -2225,6 +2225,7 @@ export const ja: TranslationResources = {
         retry: "再試行",
         noAddress: "アドレスなし",
         updateHost: "Hostの更新が必要です",
+        loopbackHint: "ローカルプロセスがリスナーを使えます。アクセス境界はループバックです。",
         unknownCapability: "Port Forwardを使うにはこのHostに接続してください。",
         actionFailed: "ポート転送を更新できませんでした",
         recentError: "直前の接続: {{category}}",

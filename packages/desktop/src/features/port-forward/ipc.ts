@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { DaemonHostTunnelConnector } from "./daemon-connector.js";
 import { PortForwardManager } from "./manager.js";
 import { createPortForwardStore } from "./store.js";
+import { parsePortForwardOpenUrl } from "./open-url.js";
 import type {
   HostConnectionCandidate,
   PortForwardCreateInput,
@@ -72,7 +73,7 @@ export function registerPortForwardIpc(manager: PortForwardManager): void {
     return { ok: true };
   });
   ipcMain.handle("paseo:port-forward:open", async (_event, raw: unknown) => {
-    const url = parseOpenUrl(raw);
+    const url = parsePortForwardOpenUrl(raw);
     await shell.openExternal(url);
     return { ok: true };
   });
@@ -136,20 +137,6 @@ function parseRekey(raw: unknown): { oldServerId: string; newServerId: string } 
     throw new Error("Host rekey requires oldServerId and newServerId");
   }
   return { oldServerId: raw.oldServerId, newServerId: raw.newServerId };
-}
-
-function parseOpenUrl(raw: unknown): string {
-  if (!isRecord(raw) || typeof raw.url !== "string") {
-    throw new Error("Open requires a localhost URL");
-  }
-  const url = new URL(raw.url);
-  if (url.protocol !== "http:" && url.protocol !== "https:") {
-    throw new Error("Open requires a localhost URL");
-  }
-  if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1" && url.hostname !== "[::1]") {
-    throw new Error("Open is limited to the Port Forward localhost address");
-  }
-  return url.toString();
 }
 
 function isOpenAs(value: unknown): value is PortForwardOpenAs {

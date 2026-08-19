@@ -93,6 +93,8 @@ vi.mock("@/constants/platform", () => ({
 
 vi.mock("@/hooks/use-is-local-daemon", () => ({
   useIsLocalDaemon: () => false,
+  useLocalDaemonServerIdState: () => ({ status: "resolved", serverId: "local-host" }),
+  isKnownRemoteHost: () => true,
 }));
 
 vi.mock("expo-router", () => ({

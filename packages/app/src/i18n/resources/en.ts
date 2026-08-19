@@ -2217,6 +2217,7 @@ export const en = {
         retry: "Retry",
         noAddress: "No address",
         updateHost: "Update Host required",
+        loopbackHint: "Local processes can use the listener. Loopback is the access boundary.",
         unknownCapability: "Connect to this Host to use Port Forward.",
         actionFailed: "Unable to update Port Forward",
         recentError: "Last connection: {{category}}",

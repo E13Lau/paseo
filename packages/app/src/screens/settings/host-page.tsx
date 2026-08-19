@@ -43,7 +43,11 @@ import { useDaemonStatus } from "@/desktop/hooks/use-daemon-status";
 import { loadDesktopSettings, useDesktopSettings } from "@/desktop/settings/desktop-settings";
 import { PairDeviceModal } from "@/desktop/components/pair-device-modal";
 import { useDaemonConfig } from "@/hooks/use-daemon-config";
-import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
+import {
+  isKnownRemoteHost,
+  useIsLocalDaemon,
+  useLocalDaemonServerIdState,
+} from "@/hooks/use-is-local-daemon";
 import {
   getHostRuntimeStore,
   isHostRuntimeConnected,
@@ -361,6 +365,8 @@ export function HostSettingsPage({
 }) {
   const host = useHostProfile(serverId);
   const isLocalDaemon = useIsLocalDaemon(serverId);
+  const localDaemon = useLocalDaemonServerIdState();
+  const showPorts = isKnownRemoteHost(host?.serverId ?? "", localDaemon);
 
   if (!host) {
     return <HostNotFound />;
@@ -384,7 +390,7 @@ export function HostSettingsPage({
 
       {!isLocalDaemon ? <UpdateDaemonCard key={host.serverId} host={host} /> : null}
 
-      {!isLocalDaemon ? <PortsSection serverId={host.serverId} /> : null}
+      {showPorts ? <PortsSection serverId={host.serverId} /> : null}
 
       <RemoveHostSection host={host} isLocalDaemon={isLocalDaemon} onRemoved={onHostRemoved} />
     </View>

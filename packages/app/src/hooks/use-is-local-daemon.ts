@@ -74,3 +74,17 @@ export function useIsLocalDaemon(serverId: string): boolean {
 
   return localServerId === normalizedServerId;
 }
+
+export function isKnownRemoteHost(serverId: string, local: LocalDaemonServerIdState): boolean {
+  if (local.status !== "resolved") {
+    return false;
+  }
+  if (local.serverId === null || local.serverId.length === 0) {
+    return false;
+  }
+  const normalizedServerId = serverId.trim();
+  if (normalizedServerId.length === 0) {
+    return false;
+  }
+  return local.serverId !== normalizedServerId;
+}

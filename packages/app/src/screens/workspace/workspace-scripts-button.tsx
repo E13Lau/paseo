@@ -38,7 +38,7 @@ import type { Theme } from "@/styles/theme";
 import { useWorkspaceServiceRoutePreferencesStore } from "@/workspace-service-routes/store";
 import { buttonControlHeight } from "@/components/ui/control-geometry";
 import { getIsElectron } from "@/constants/platform";
-import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
+import { isKnownRemoteHost, useLocalDaemonServerIdState } from "@/hooks/use-is-local-daemon";
 import { openForwardPortShortcut } from "@/screens/settings/port-forward/ports-section";
 import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
 import { useRouter } from "expo-router";
@@ -401,9 +401,13 @@ function ForwardPortAction({
 }): ReactElement | null {
   const { t } = useTranslation();
   const router = useRouter();
-  const isLocalDaemon = useIsLocalDaemon(serverId);
+  const localDaemon = useLocalDaemonServerIdState();
   const visible =
-    getIsElectron() && !isLocalDaemon && isService && isRunning && typeof port === "number";
+    getIsElectron() &&
+    isKnownRemoteHost(serverId, localDaemon) &&
+    isService &&
+    isRunning &&
+    typeof port === "number";
   const handlePress = useCallback(() => {
     if (typeof port !== "number") return;
     closeMenu();

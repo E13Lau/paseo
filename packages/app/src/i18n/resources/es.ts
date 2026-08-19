@@ -2256,6 +2256,8 @@ export const es: TranslationResources = {
         retry: "Reintentar",
         noAddress: "Sin dirección",
         updateHost: "Hay que actualizar el Host",
+        loopbackHint:
+          "Los procesos locales pueden usar el listener. Loopback es el límite de acceso.",
         unknownCapability: "Conéctate a este Host para usar Port Forward.",
         actionFailed: "No se pudo actualizar el reenvío",
         recentError: "Última conexión: {{category}}",

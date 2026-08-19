@@ -221,6 +221,45 @@ describe("Ports section", () => {
       requireLocalPort: false,
       openAs: "none",
     });
+    expect(container.querySelector('[data-testid="host-ports-loopback-hint"]')).not.toBeNull();
+    root.unmount();
+  });
+
+  it("disables save while a create is in flight", async () => {
+    createMock.mockImplementation(() => new Promise(() => {}));
+    const container = document.createElement("div");
+    document.body.appendChild(container);
+    const root = createRoot(container);
+    await act(async () => {
+      root.render(<PortsSection serverId="host-a" />);
+    });
+    await act(async () => {
+      fireEvent.click(
+        container.querySelector('[data-testid="host-ports-add"]') as HTMLButtonElement,
+      );
+    });
+    await act(async () => {
+      fireEvent.change(
+        container.querySelector('[data-testid="host-ports-target"]') as HTMLInputElement,
+        {
+          target: { value: "8080" },
+        },
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        container.querySelector('[data-testid="host-ports-submit"]') as HTMLButtonElement,
+      );
+    });
+    await act(async () => {
+      fireEvent.click(
+        container.querySelector('[data-testid="host-ports-submit"]') as HTMLButtonElement,
+      );
+    });
+    expect(createMock).toHaveBeenCalledTimes(1);
+    expect(
+      (container.querySelector('[data-testid="host-ports-submit"]') as HTMLButtonElement).disabled,
+    ).toBe(true);
     root.unmount();
   });
 });

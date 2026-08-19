@@ -2240,6 +2240,7 @@ export const ptBR: TranslationResources = {
         retry: "Tentar de novo",
         noAddress: "Sem endereço",
         updateHost: "Atualização do Host necessária",
+        loopbackHint: "Processos locais podem usar o listener. Loopback é o limite de acesso.",
         unknownCapability: "Conecte-se a este Host para usar Port Forward.",
         actionFailed: "Não foi possível atualizar o encaminhamento",
         recentError: "Última conexão: {{category}}",

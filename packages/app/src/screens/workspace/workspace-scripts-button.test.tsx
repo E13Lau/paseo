@@ -88,6 +88,19 @@ vi.mock("react-native-unistyles", () => ({
 vi.mock("@/constants/platform", () => ({
   isNative: false,
   isWeb: true,
+  getIsElectron: () => false,
+}));
+
+vi.mock("@/hooks/use-is-local-daemon", () => ({
+  useIsLocalDaemon: () => false,
+}));
+
+vi.mock("expo-router", () => ({
+  useRouter: () => ({ push: vi.fn() }),
+}));
+
+vi.mock("@/screens/settings/port-forward/ports-section", () => ({
+  openForwardPortShortcut: vi.fn(),
 }));
 
 vi.mock("@/runtime/host-runtime", () => ({

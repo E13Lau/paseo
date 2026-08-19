@@ -125,4 +125,20 @@ contextBridge.exposeInMainWorld("paseoDesktop", {
     copyElement: (payload: { text?: string; imageDataUrl?: string }) =>
       ipcRenderer.invoke("paseo:browser:copy-element", payload),
   },
+  portForward: {
+    list: (serverId?: string) => ipcRenderer.invoke("paseo:port-forward:list", serverId),
+    create: (input: Record<string, unknown>) =>
+      ipcRenderer.invoke("paseo:port-forward:create", input),
+    update: (input: Record<string, unknown>) =>
+      ipcRenderer.invoke("paseo:port-forward:update", input),
+    stop: (id: string) => ipcRenderer.invoke("paseo:port-forward:stop", id),
+    retry: (id: string) => ipcRenderer.invoke("paseo:port-forward:retry", id),
+    syncCandidates: (input: Record<string, unknown>) =>
+      ipcRenderer.invoke("paseo:port-forward:sync-candidates", input),
+    removeHost: (serverId: string) =>
+      ipcRenderer.invoke("paseo:port-forward:remove-host", serverId),
+    rekeyHost: (input: Record<string, unknown>) =>
+      ipcRenderer.invoke("paseo:port-forward:rekey-host", input),
+    open: (input: { url: string }) => ipcRenderer.invoke("paseo:port-forward:open", input),
+  },
 });

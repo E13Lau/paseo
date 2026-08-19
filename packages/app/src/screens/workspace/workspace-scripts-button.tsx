@@ -36,6 +36,12 @@ import {
 } from "@/utils/workspace-script-links";
 import type { Theme } from "@/styles/theme";
 import { useWorkspaceServiceRoutePreferencesStore } from "@/workspace-service-routes/store";
+import { buttonControlHeight } from "@/components/ui/control-geometry";
+import { getIsElectron } from "@/constants/platform";
+import { useIsLocalDaemon } from "@/hooks/use-is-local-daemon";
+import { openForwardPortShortcut } from "@/screens/settings/port-forward/ports-section";
+import { buildSettingsHostSectionRoute } from "@/utils/host-routes";
+import { useRouter } from "expo-router";
 
 type RowActionIcon = "copy" | "open" | "restart" | "start" | "stop" | "terminal";
 
@@ -378,6 +384,50 @@ function resolveScriptIconColorMapping(args: {
   return mutedColorMapping;
 }
 
+function ForwardPortAction({
+  serverId,
+  scriptName,
+  port,
+  isService,
+  isRunning,
+  closeMenu,
+}: {
+  serverId: string;
+  scriptName: string;
+  port: number | null;
+  isService: boolean;
+  isRunning: boolean;
+  closeMenu: () => void;
+}): ReactElement | null {
+  const { t } = useTranslation();
+  const router = useRouter();
+  const isLocalDaemon = useIsLocalDaemon(serverId);
+  const visible =
+    getIsElectron() && !isLocalDaemon && isService && isRunning && typeof port === "number";
+  const handlePress = useCallback(() => {
+    if (typeof port !== "number") return;
+    closeMenu();
+    openForwardPortShortcut({
+      serverId,
+      target: String(port),
+      label: scriptName,
+    });
+    router.push(buildSettingsHostSectionRoute(serverId, "host"));
+  }, [closeMenu, port, router, scriptName, serverId]);
+  if (!visible) {
+    return null;
+  }
+  return (
+    <ScriptRowActionButton
+      accessibilityLabel={t("workspace.scripts.accessibility.forwardPort", { scriptName })}
+      testID={`workspace-scripts-forward-${scriptName}`}
+      icon="open"
+      onPress={handlePress}
+      tooltipLabel={t("workspace.scripts.actions.forwardPort")}
+    />
+  );
+}
+
 function ScriptRow({
   script,
   liveTerminalIdSet,
@@ -392,7 +442,8 @@ function ScriptRow({
   onSelectRouteKind,
   onViewTerminal,
   onOpenUrlInBrowserTab,
-}: ScriptRowProps): ReactElement {
+  serverId,
+}: ScriptRowProps & { serverId: string }): ReactElement {
   const { t } = useTranslation();
   const isRunning = script.lifecycle === "running";
   const isService = (script.type ?? "service") === "service";
@@ -503,6 +554,14 @@ function ScriptRow({
         {showExitBadge ? <ExitCodeBadge code={exitCode} /> : null}
         <View style={styles.spacer} />
         {openServiceAction}
+        <ForwardPortAction
+          serverId={serverId}
+          scriptName={script.scriptName}
+          port={script.port}
+          isService={isService}
+          isRunning={isRunning}
+          closeMenu={closeMenu}
+        />
         {viewAction}
         {isRunning ? (
           <ScriptRowActionButton
@@ -710,6 +769,7 @@ export function WorkspaceScriptsButton({
                 <Fragment key={script.scriptName}>
                   {index > 0 ? <DropdownMenuSeparator /> : null}
                   <ScriptRow
+                    serverId={serverId}
                     script={script}
                     liveTerminalIdSet={liveTerminalIdSet}
                     activeConnection={activeConnection}

@@ -43,6 +43,12 @@ import {
 } from "@/desktop/daemon/desktop-daemon-transport";
 import { getDesktopHost } from "@/desktop/host";
 import { CLIENT_CAPS } from "@getpaseo/protocol/client-capabilities";
+import {
+  rekeyPortForwardHost,
+  removePortForwardHost,
+  syncPortForwardCandidates,
+} from "@/desktop/port-forward/facade";
+import { getIsElectron } from "@/constants/platform";
 import { BROWSER_AUTOMATION_COMMAND_NAMES } from "@getpaseo/protocol/browser-automation/rpc-schemas";
 import { useSessionStore } from "@/stores/session-store";
 import { useWorkspaceSetupStore } from "@/stores/workspace-setup-store";
@@ -480,6 +486,7 @@ function createDefaultDeps(): HostRuntimeControllerDeps {
     : undefined;
   const appCapabilities = {
     [CLIENT_CAPS.selectiveAgentTimeline]: true,
+    ...(getIsElectron() ? { [CLIENT_CAPS.hostTunnelStreams]: true } : {}),
     ...browserAutomationCapabilities,
   };
 
@@ -1628,6 +1635,7 @@ export class HostRuntimeStore {
     );
     this.directorySyncByServer.set(newServerId, directory);
     controller.adoptReconciledServerId(newServerId);
+    void rekeyPortForwardHost(oldServerId, newServerId);
     const snapshot = controller.getSnapshot();
     this.clearHostReplica(oldServerId);
     this.syncSessionReplica(newServerId, snapshot);
@@ -1874,6 +1882,7 @@ export class HostRuntimeStore {
     const remaining = this.hosts.filter((daemon) => daemon.serverId !== serverId);
     this.setHostsAndSync(remaining);
     await this.persistHosts();
+    void removePortForwardHost(serverId);
   }
 
   async removeConnection(serverId: string, connectionId: string): Promise<void> {
@@ -1955,6 +1964,13 @@ export class HostRuntimeStore {
     this.hosts = hosts;
     this.syncHosts(hosts, options);
     this.emitHostList();
+    this.syncPortForwardCandidates(hosts);
+  }
+
+  private syncPortForwardCandidates(hosts: HostProfile[]): void {
+    for (const host of hosts) {
+      void syncPortForwardCandidates(host.serverId, host.connections);
+    }
   }
 
   private async persistHosts(hosts = this.hosts): Promise<void> {

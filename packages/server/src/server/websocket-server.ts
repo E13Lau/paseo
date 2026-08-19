@@ -1644,6 +1644,8 @@ export class VoiceAssistantWebSocketServer {
         agentConfigApply: true,
         // COMPAT(conversationHistory): added in v0.5.0, remove gate after 2027-08-18.
         conversationHistory: true,
+        // COMPAT(portForward): added in v0.4.0, remove gate after 2027-02-19.
+        portForward: true,
       },
     };
   }

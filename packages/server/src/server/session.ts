@@ -29,6 +29,7 @@ import type {
 import { TerminalSessionController } from "../terminal/terminal-session-controller.js";
 import type { TerminalActivity } from "@getpaseo/protocol/terminal-activity";
 import type { BinaryFrame } from "@getpaseo/protocol/binary-frames/index";
+import { HostTunnelSession } from "./session/host-tunnel/host-tunnel-session.js";
 import { CursorError } from "./pagination/cursor.js";
 import { SortablePager, type SortSpec } from "./pagination/sortable-pager.js";
 import { describeAgentHistoryMatches, rankAgentHistoryCandidates } from "./agent-history-search.js";
@@ -693,6 +694,7 @@ export class Session {
   private readonly workspaceScripts: WorkspaceScriptsService;
   private readonly createAgentLifecycleDispatch: CreateAgentLifecycleDispatch;
   private readonly conversationHistory: ConversationHistoryService;
+  private readonly hostTunnelSession: HostTunnelSession;
 
   constructor(options: SessionOptions) {
     const {
@@ -938,6 +940,14 @@ export class Session {
       clientSupportsWrapReflow: () =>
         this.clientCapabilities.has(CLIENT_CAPS.terminalReflowableSnapshot),
       getClientBufferedAmount: () => this.getTransportBufferedAmount(),
+    });
+    this.hostTunnelSession = new HostTunnelSession({
+      host: {
+        emitBinary: (frame) => this.emitBinary(frame),
+        supportsHostTunnelStreams: () => this.supports(CLIENT_CAPS.hostTunnelStreams),
+      },
+      logger: this.sessionLogger,
+      networkDebug: process.env.PASEO_NETWORK_DEBUG === "1",
     });
     this.agentUpdates = createAgentUpdatesService({
       emit: (message) => this.emit(message),
@@ -2430,6 +2440,10 @@ export class Session {
   public async handleBinaryFrame(binaryFrame: BinaryFrame): Promise<void> {
     if (binaryFrame.kind === "file_transfer") {
       await this.workspaceFilesSession.handleFileTransferFrame(binaryFrame.frame);
+      return;
+    }
+    if (binaryFrame.kind === "host_tunnel") {
+      this.hostTunnelSession.handleFrame(binaryFrame.frame);
       return;
     }
     this.terminalController.handleBinaryFrame(binaryFrame.frame);
@@ -7134,6 +7148,7 @@ export class Session {
     await this.voiceSession.cleanup();
 
     this.terminalController.dispose();
+    this.hostTunnelSession.dispose();
 
     this.checkoutSession.cleanup();
 

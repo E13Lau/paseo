@@ -142,6 +142,61 @@ export interface DesktopAttachedBrowserRegistration {
   webContentsId: number;
 }
 
+export interface DesktopPortForwardSnapshot {
+  id: string;
+  serverId: string;
+  targetHost: string;
+  targetPort: number;
+  targetDisplay: string;
+  label: string;
+  preferredLocalPort: number;
+  localPort: number | null;
+  localAddress: string | null;
+  requireLocalPort: boolean;
+  openAs: "none" | "http" | "https";
+  state:
+    | "starting"
+    | "waiting_for_host"
+    | "update_host_required"
+    | "ready"
+    | "port_unavailable"
+    | "error";
+  recentError: { category: string; at: string } | null;
+}
+
+export interface DesktopPortForwardCreateInput {
+  serverId: string;
+  target: string;
+  label?: string;
+  localPort?: number;
+  requireLocalPort?: boolean;
+  openAs?: "none" | "http" | "https";
+}
+
+export interface DesktopPortForwardUpdateInput {
+  id: string;
+  target?: string;
+  label?: string;
+  localPort?: number;
+  requireLocalPort?: boolean;
+  openAs?: "none" | "http" | "https";
+}
+
+export interface DesktopPortForwardBridge {
+  list?: (serverId?: string) => Promise<DesktopPortForwardSnapshot[]>;
+  create?: (input: DesktopPortForwardCreateInput) => Promise<DesktopPortForwardSnapshot>;
+  update?: (input: DesktopPortForwardUpdateInput) => Promise<DesktopPortForwardSnapshot>;
+  stop?: (id: string) => Promise<{ ok: true }>;
+  retry?: (id: string) => Promise<DesktopPortForwardSnapshot>;
+  syncCandidates?: (input: {
+    serverId: string;
+    candidates: Array<Record<string, unknown>>;
+  }) => Promise<{ ok: true }>;
+  removeHost?: (serverId: string) => Promise<{ ok: true }>;
+  rekeyHost?: (input: { oldServerId: string; newServerId: string }) => Promise<{ ok: true }>;
+  open?: (input: { url: string }) => Promise<{ ok: true }>;
+}
+
 export interface DesktopBrowserBridge {
   setShortcutPolicy?: (input: BrowserKeyboardPolicy) => Promise<void>;
   readonly profilePartition?: string;
@@ -184,6 +239,7 @@ export interface DesktopHostBridge {
   webUtils?: DesktopWebUtilsBridge;
   menu?: DesktopMenuBridge;
   browser?: DesktopBrowserBridge;
+  portForward?: DesktopPortForwardBridge;
 }
 
 declare global {

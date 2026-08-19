@@ -25,6 +25,10 @@ export const CLIENT_CAPS = {
   // Remove the legacy snapshot encoding after 2027-02-04.
   compactProviderSnapshots: "compact_provider_snapshots",
   browserHost: "browser_host",
+  // COMPAT(hostTunnelStreams): added in v0.4.0, remove after 2027-02-19.
+  // Capable clients may send and receive Host tunnel binary frames. The daemon
+  // must not accept or emit those frames when this cap is absent.
+  hostTunnelStreams: "host_tunnel_streams",
 } as const;
 
 export type ClientCapability = (typeof CLIENT_CAPS)[keyof typeof CLIENT_CAPS];

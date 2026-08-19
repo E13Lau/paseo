@@ -21,6 +21,7 @@ import {
 import type { ProviderAvailability } from "../../agent/agent-manager.js";
 import type { ProviderUsageService } from "../../../services/quota-fetcher/service.js";
 import { expandTilde } from "../../../utils/path.js";
+import { InstructionFileService } from "../../instruction-files/service.js";
 
 // COMPAT(customModeIcons): the only mode icons known to clients before v0.1.84. Any
 // other icon name is downgraded to "ShieldCheck" for those clients.
@@ -82,6 +83,7 @@ export class ProviderCatalogSession {
   private readonly host: ProviderCatalogSessionHost;
   private readonly providerSnapshotManager: ProviderSnapshotManager;
   private readonly providerUsageService: ProviderUsageService;
+  private readonly instructionFiles: InstructionFileService;
   private readonly logger: pino.Logger;
   private unsubscribeSnapshotEvents: (() => void) | null = null;
 
@@ -89,6 +91,7 @@ export class ProviderCatalogSession {
     this.host = options.host;
     this.providerSnapshotManager = options.providerSnapshotManager;
     this.providerUsageService = options.providerUsageService;
+    this.instructionFiles = new InstructionFileService(options.providerSnapshotManager);
     this.logger = options.logger;
   }
 
@@ -503,6 +506,97 @@ export class ProviderCatalogSession {
           requestType: msg.type,
           error: `Failed to list provider usage: ${err.message}`,
           code: "provider_usage_list_failed",
+        },
+      });
+    }
+  }
+
+  async handleInstructionFileListRequest(
+    msg: Extract<SessionInboundMessage, { type: "provider.instruction_file.list.request" }>,
+  ): Promise<void> {
+    try {
+      const files = await this.instructionFiles.list();
+      this.host.emit({
+        type: "provider.instruction_file.list.response",
+        payload: { requestId: msg.requestId, files },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to list instruction files");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to list instruction files: ${err.message}`,
+          code: "provider_instruction_file_list_failed",
+        },
+      });
+    }
+  }
+
+  async handleInstructionFileGetRequest(
+    msg: Extract<SessionInboundMessage, { type: "provider.instruction_file.get.request" }>,
+  ): Promise<void> {
+    try {
+      const result = await this.instructionFiles.get(msg.id);
+      if (result.status === "error") {
+        this.host.emit({
+          type: "provider.instruction_file.get.response",
+          payload: { requestId: msg.requestId, status: "error", error: result.error },
+        });
+        return;
+      }
+      this.host.emit({
+        type: "provider.instruction_file.get.response",
+        payload: {
+          requestId: msg.requestId,
+          status: "ok",
+          id: result.id,
+          text: result.text,
+          missing: result.missing,
+          version: result.version,
+        },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to get instruction file");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to get instruction file: ${err.message}`,
+          code: "provider_instruction_file_get_failed",
+        },
+      });
+    }
+  }
+
+  async handleInstructionFileWriteRequest(
+    msg: Extract<SessionInboundMessage, { type: "provider.instruction_file.write.request" }>,
+  ): Promise<void> {
+    try {
+      const result = await this.instructionFiles.write({
+        id: msg.id,
+        text: msg.text,
+        expectedModifiedAt: msg.expectedModifiedAt,
+        expectedRevision: msg.expectedRevision,
+      });
+      this.host.emit({
+        type: "provider.instruction_file.write.response",
+        payload: { requestId: msg.requestId, result },
+      });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error({ err }, "Failed to write instruction file");
+      this.host.emit({
+        type: "rpc_error",
+        payload: {
+          requestId: msg.requestId,
+          requestType: msg.type,
+          error: `Failed to write instruction file: ${err.message}`,
+          code: "provider_instruction_file_write_failed",
         },
       });
     }

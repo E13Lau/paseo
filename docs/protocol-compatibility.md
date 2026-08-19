@@ -32,7 +32,7 @@ Features don't have to work across versions. A new feature usually needs a new d
 
 The app checks for the capability and either runs the feature or tells the user to update the host.
 
-- **No fallback paths.** Don't build a degraded version of the feature for old daemons. Don't fan out across legacy RPCs to simulate a capability that isn't there. The user updates or doesn't get the feature.
+- **No fallback paths.** Don't build a degraded version of the feature for old daemons. Don't fan out across legacy RPCs to simulate a capability that isn't there. The user updates or doesn't get the feature. Host **Instruction files** gate on `providerInstructionFiles` and must not fall back to `fs.*`.
 - **No defensive branches spread through the feature.** Detection happens in one place, and everything downstream reads a clean shape.
 - Capability flags live in `features` on the `server_info` message (`packages/protocol/src/messages.ts`, the `server_info` schema).
 

@@ -2353,6 +2353,12 @@ export class Session {
         return this.providerCatalogSession.handleProviderDiagnosticRequest(msg);
       case "provider.usage.list.request":
         return this.providerCatalogSession.handleProviderUsageListRequest(msg);
+      case "provider.instruction_file.list.request":
+        return this.providerCatalogSession.handleInstructionFileListRequest(msg);
+      case "provider.instruction_file.get.request":
+        return this.providerCatalogSession.handleInstructionFileGetRequest(msg);
+      case "provider.instruction_file.write.request":
+        return this.providerCatalogSession.handleInstructionFileWriteRequest(msg);
       default:
         return undefined;
     }

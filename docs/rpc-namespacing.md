@@ -58,6 +58,8 @@ Responses put correlated result data under `payload`:
 
 Keep `requestId` in both request and response payloads. It is the correlation key.
 
+Host **Instruction files** follow this shape as `provider.instruction_file.list|get|write`. The client sends a daemon-assigned catalog id, never a filesystem path. See [ADR-0003](adr/0003-user-instruction-files-are-a-host-settings-catalog.md).
+
 ## Forge Namespacing
 
 Forge-neutral behavior currently uses `checkout.forge.*` for checkout-scoped operations and `forge.search.*` for forge search; forge-specific names belong here only after schema and session handlers exist:

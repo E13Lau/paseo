@@ -64,19 +64,20 @@ not retain non-Git directories.
 
 **Key modules:**
 
-| Module                          | Responsibility                                                                |
-| ------------------------------- | ----------------------------------------------------------------------------- |
-| `server/bootstrap.ts`           | Daemon initialization: HTTP server, WS server, agent manager, storage, relay  |
-| `server/websocket-server.ts`    | WebSocket connection management, hello handshake, binary frame routing        |
-| `server/session.ts`             | Per-client session state, timeline subscriptions, terminal operations         |
-| `server/directory-sync/`        | Daemon-global latest-state sequences for projects, workspaces, and agents     |
-| `server/agent/agent-manager.ts` | Agent lifecycle state machine, timeline tracking, subscriber management       |
-| `server/agent/agent-storage.ts` | File-backed JSON persistence at `$PASEO_HOME/agents/`                         |
-| `server/agent/tools/`           | Transport-neutral catalog for workspaces, agents, permissions, and automation |
-| `server/agent/mcp-server.ts`    | Thin MCP adapter that registers the Paseo tool catalog with the MCP SDK       |
-| `server/agent/providers/`       | Provider adapters (see "Agent providers" below)                               |
-| `server/relay-transport.ts`     | Outbound relay connection with E2E encryption                                 |
-| `server/schedule/`              | Cron-based scheduled agents                                                   |
+| Module                          | Responsibility                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------ |
+| `server/bootstrap.ts`           | Daemon initialization: HTTP server, WS server, agent manager, storage, relay               |
+| `server/websocket-server.ts`    | WebSocket connection management, hello handshake, binary frame routing                     |
+| `server/session.ts`             | Per-client session state, timeline subscriptions, terminal operations                      |
+| `server/directory-sync/`        | Daemon-global latest-state sequences for projects, workspaces, and agents                  |
+| `server/agent/agent-manager.ts` | Agent lifecycle state machine, timeline tracking, subscriber management                    |
+| `server/agent/agent-storage.ts` | File-backed JSON persistence at `$PASEO_HOME/agents/`                                      |
+| `server/agent/tools/`           | Transport-neutral catalog for workspaces, agents, permissions, and automation              |
+| `server/agent/mcp-server.ts`    | Thin MCP adapter that registers the Paseo tool catalog with the MCP SDK                    |
+| `server/agent/providers/`       | Provider adapters (see "Agent providers" below)                                            |
+| `server/instruction-files/`     | Host **Instruction files** catalog: Claude/Codex user-scope paths, read/write, stale-write |
+| `server/relay-transport.ts`     | Outbound relay connection with E2E encryption                                              |
+| `server/schedule/`              | Cron-based scheduled agents                                                                |
 
 ### `packages/protocol` — Wire schemas and shared protocol types
 
@@ -224,7 +225,7 @@ Every physical send path enforces an 8 MiB outbound high-water mark, including J
 
 Client session RPC waits default to 60s so slow relay or mobile networks do not turn a live but delayed daemon response into a false operation failure. Keep connect timeouts, app-level grace windows, explicit diagnostic latency probes, liveness ping timers, and genuinely long-running RPCs separate from this default.
 
-New session RPCs use dotted names with `.request` and `.response` suffixes, such as `checkout.forge.set_auto_merge.request` and `checkout.forge.set_auto_merge.response`. See [rpc-namespacing.md](rpc-namespacing.md) for the convention and migration rules for older flat RPC names.
+New session RPCs use dotted names with `.request` and `.response` suffixes, such as `checkout.forge.set_auto_merge.request` and `checkout.forge.set_auto_merge.response`. See [rpc-namespacing.md](rpc-namespacing.md) for the convention and migration rules for older flat RPC names. Host **Instruction files** use `provider.instruction_file.list|get|write` and are gated on `server_info.features.providerInstructionFiles`; they are not Workspace file tabs and not `fs.*` with `cwd: "~"`. See [ADR-0003](adr/0003-user-instruction-files-are-a-host-settings-catalog.md).
 
 **Notable session message types:**
 

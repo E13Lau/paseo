@@ -44,6 +44,10 @@ import {
   type AgentConfigurationValidationInput,
   validateAgentConfigurationAgainstProvider,
 } from "./agent-configuration-validator.js";
+import {
+  instructionFileFamily,
+  type InstructionFileProviderSource,
+} from "../instruction-files/catalog.js";
 
 const DEFAULT_REFRESH_TIMEOUT_MS = 120_000;
 const MAX_REFRESH_TIMEOUT_MS = 2_147_483_647;
@@ -285,6 +289,23 @@ export class ProviderSnapshotManager {
 
   getProviderLabel(provider: AgentProvider): string {
     return this.providerRegistry[provider]?.label ?? provider;
+  }
+
+  listInstructionFileSources(): InstructionFileProviderSource[] {
+    const sources: InstructionFileProviderSource[] = [];
+    for (const provider of this.getProviderIds()) {
+      const definition = this.providerRegistry[provider];
+      if (!definition) continue;
+      const family = instructionFileFamily(provider, definition.derivedFromProviderId);
+      if (!family) continue;
+      sources.push({
+        id: provider,
+        label: definition.label,
+        family,
+        env: this.getProviderLaunchEnv(provider),
+      });
+    }
+    return sources;
   }
 
   getAgentManagerProviderState(): AgentManagerProviderState {
@@ -966,6 +987,17 @@ export class ProviderSnapshotManager {
       });
     }
     return snapshot;
+  }
+
+  private getProviderLaunchEnv(provider: AgentProvider): Record<string, string> | undefined {
+    const derivedFrom = this.providerRegistry[provider]?.derivedFromProviderId;
+    const env = {
+      ...this.runtimeSettings?.[derivedFrom ?? provider]?.env,
+      ...(derivedFrom ? this.providerOverrides?.[derivedFrom]?.env : undefined),
+      ...this.runtimeSettings?.[provider]?.env,
+      ...this.providerOverrides?.[provider]?.env,
+    };
+    return Object.keys(env).length > 0 ? env : undefined;
   }
 
   private getProviderIds(): AgentProvider[] {

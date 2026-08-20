@@ -125,10 +125,12 @@ import {
   asUint8Array,
   decodeFileTransferFrame,
   encodeFileTransferFrame,
+  decodeHostTunnelFrame,
   decodeTerminalStreamFrame,
   FileTransferOpcode,
   TerminalStreamOpcode,
   type FileTransferFrame,
+  type HostTunnelFrame,
 } from "@getpaseo/protocol/binary-frames/index";
 import {
   createRelayE2eeTransportFactory,
@@ -1037,6 +1039,7 @@ export class DaemonClient {
   private transport: DaemonTransport | null = null;
   private transportCleanup: Array<() => void> = [];
   private rawMessageListeners: Set<(message: SessionOutboundMessage) => void> = new Set();
+  private hostTunnelListeners: Set<(frame: HostTunnelFrame) => void> = new Set();
   private messageHandlers: Map<
     SessionOutboundMessage["type"],
     Set<(message: SessionOutboundMessage) => void>
@@ -1419,6 +1422,17 @@ export class DaemonClient {
     return () => {
       this.rawMessageListeners.delete(handler);
     };
+  }
+
+  subscribeHostTunnelFrames(handler: (frame: HostTunnelFrame) => void): () => void {
+    this.hostTunnelListeners.add(handler);
+    return () => {
+      this.hostTunnelListeners.delete(handler);
+    };
+  }
+
+  sendHostTunnelFrame(frame: Uint8Array): void {
+    this.sendBinaryFrame(frame);
   }
 
   on<TType extends SessionOutboundMessage["type"]>(
@@ -5498,6 +5512,21 @@ export class DaemonClient {
   }
 
   private tryHandleBinaryFrame(rawBytes: Uint8Array): boolean {
+    const hostTunnelFrame = decodeHostTunnelFrame(rawBytes);
+    if (hostTunnelFrame) {
+      this.traceInstant("paseo.ws.message.inbound", {
+        envelopeType: "binary",
+        messageType: "host_tunnel",
+        opcode: String(hostTunnelFrame.opcode),
+      });
+      this.consecutiveLivenessFailures = 0;
+      for (const handler of this.hostTunnelListeners) {
+        handler(hostTunnelFrame);
+      }
+      this.runtimeMetrics?.recordBinaryFrame("other", rawBytes.byteLength, 0);
+      return true;
+    }
+
     const fileFrame = decodeFileTransferFrame(rawBytes);
     if (fileFrame) {
       this.traceInstant("paseo.ws.message.inbound", {

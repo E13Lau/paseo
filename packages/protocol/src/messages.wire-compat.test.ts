@@ -43,6 +43,36 @@ const LegacyAgentSnapshotPayloadSchema = AgentSnapshotPayloadSchema.extend({
 });
 
 describe("wire schema compatibility", () => {
+  test("hello and server info stay compatible without host tunnel fields", () => {
+    const hello = WSHelloMessageSchema.parse({
+      type: "hello",
+      clientId: "legacy-client",
+      clientType: "mobile",
+      protocolVersion: 1,
+    });
+    const capable = WSHelloMessageSchema.parse({
+      type: "hello",
+      clientId: "capable-client",
+      clientType: "mobile",
+      protocolVersion: 1,
+      capabilities: { host_tunnel_streams: true },
+    });
+    const serverInfo = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "legacy-server",
+    });
+    const capableServerInfo = ServerInfoStatusPayloadSchema.parse({
+      status: "server_info",
+      serverId: "capable-server",
+      features: { portForward: true },
+    });
+
+    expect(hello.capabilities).toBeUndefined();
+    expect(capable.capabilities).toEqual({ host_tunnel_streams: true });
+    expect(serverInfo.features).toBeUndefined();
+    expect(capableServerInfo.features).toEqual({ portForward: true });
+  });
+
   test("hello parses with and without the project update capability", () => {
     const legacy = WSHelloMessageSchema.parse({
       type: "hello",

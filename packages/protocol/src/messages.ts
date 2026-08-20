@@ -3188,6 +3188,8 @@ export const ServerInfoStatusPayloadSchema = z
         agentConfigApply: z.boolean().optional(),
         // COMPAT(conversationHistory): added in v0.5.0, remove gate after 2027-08-18.
         conversationHistory: z.boolean().optional(),
+        // COMPAT(portForward): added in v0.4.0, remove gate after 2027-02-19.
+        portForward: z.boolean().optional(),
       })
       .optional(),
   })
@@ -6378,6 +6380,8 @@ export const WSHelloMessageSchema = z.object({
       [CLIENT_CAPS.projectUpdates]: z.boolean().optional(),
       [CLIENT_CAPS.compactProviderSnapshots]: z.boolean().optional(),
       [CLIENT_CAPS.browserHost]: BrowserAutomationHostCapabilitySchema.optional(),
+      // COMPAT(hostTunnelStreams): added in v0.4.0, remove after 2027-02-19.
+      [CLIENT_CAPS.hostTunnelStreams]: z.boolean().optional(),
     })
     .passthrough()
     .optional(),

@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   decodeBinaryFrame,
   encodeFileTransferFrame,
+  encodeHostTunnelFrame,
   encodeTerminalStreamFrame,
   FileTransferOpcode,
+  HostTunnelOpcode,
   TerminalStreamOpcode,
 } from "./index.js";
 
@@ -43,6 +45,27 @@ describe("binary frame demux", () => {
         opcode: FileTransferOpcode.FileChunk,
         requestId: "req-upload",
         payload: new TextEncoder().encode("hello"),
+      },
+    });
+  });
+
+  it("routes host-tunnel frames by opcode", () => {
+    expect(
+      decodeBinaryFrame(
+        encodeHostTunnelFrame({
+          opcode: HostTunnelOpcode.Open,
+          streamId: 11,
+          host: "127.0.0.1",
+          port: 8080,
+        }),
+      ),
+    ).toEqual({
+      kind: "host_tunnel",
+      frame: {
+        opcode: HostTunnelOpcode.Open,
+        streamId: 11,
+        host: "127.0.0.1",
+        port: 8080,
       },
     });
   });

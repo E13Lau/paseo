@@ -22,6 +22,7 @@ import {
   DEFAULT_TERMINAL_PROFILES,
 } from "@getpaseo/protocol/terminal-profiles";
 import { AgentProfilesSection } from "@/agent-profiles";
+import { InstructionFilesSection } from "@/instruction-files";
 import { AdaptiveModalSheet, type SheetHeader } from "@/components/adaptive-modal-sheet";
 import { SettingsTextAreaCard } from "@/components/settings-textarea";
 import { Alert as InlineAlert } from "@/components/ui/alert";
@@ -295,6 +296,7 @@ export function HostAgentsPage({ serverId }: { serverId: string }) {
           <Text style={styles.emptyText}>{t("settings.host.agents.unavailable")}</Text>
         </View>
       )}
+      <InstructionFilesSection serverId={serverId} />
       <AgentProfilesSection serverId={serverId} />
     </View>
   );

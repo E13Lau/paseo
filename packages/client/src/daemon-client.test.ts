@@ -5744,6 +5744,62 @@ test("sends provider.usage.list.request and resolves provider.usage.list.respons
   });
 });
 
+test("sends provider.instruction_file.list.request and resolves catalog rows", async () => {
+  const logger = createMockLogger();
+  const mock = createMockTransport();
+
+  const client = new DaemonClient({
+    url: "ws://test",
+    clientId: "clsk_unit_test",
+    logger,
+    reconnect: { enabled: false },
+    transportFactory: () => mock.transport,
+  });
+  clients.push(client);
+
+  const connectPromise = client.connect();
+  mock.triggerOpen();
+  await connectPromise;
+
+  const listPromise = client.listInstructionFiles({ requestId: "uif-1" });
+
+  expect(JSON.parse(assertStr(mock.sent[0]))).toEqual({
+    type: "session",
+    message: {
+      type: "provider.instruction_file.list.request",
+      requestId: "uif-1",
+    },
+  });
+
+  mock.triggerMessage(
+    wrapSessionMessage({
+      type: "provider.instruction_file.list.response",
+      payload: {
+        requestId: "uif-1",
+        files: [
+          {
+            id: "uif_abc",
+            filename: "CLAUDE.md",
+            displayPath: "~/.claude/CLAUDE.md",
+            missing: true,
+            providers: [{ id: "claude", label: "Claude" }],
+          },
+        ],
+      },
+    }),
+  );
+
+  await expect(listPromise).resolves.toEqual([
+    {
+      id: "uif_abc",
+      filename: "CLAUDE.md",
+      displayPath: "~/.claude/CLAUDE.md",
+      missing: true,
+      providers: [{ id: "claude", label: "Claude" }],
+    },
+  ]);
+});
+
 test("sends close_items_request and resolves close_items_response", async () => {
   const logger = createMockLogger();
   const mock = createMockTransport();

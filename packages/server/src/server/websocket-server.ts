@@ -1558,6 +1558,8 @@ export class VoiceAssistantWebSocketServer {
         ...(this.advertiseRelayConfig ? { relayConfig: true } : {}),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.
         pushTokenRevocation: true,
+        // COMPAT(providerInstructionFiles): added in v0.4.0, remove gate after 2027-02-19.
+        providerInstructionFiles: true,
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": true,
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.

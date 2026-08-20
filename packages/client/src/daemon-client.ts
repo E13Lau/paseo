@@ -101,6 +101,9 @@ import type {
   PaseoConfigRevision,
   WorkspaceCreateRequest,
   WorkspaceRecoveryState,
+  InstructionFileListItem,
+  InstructionFileWriteResult,
+  ProviderInstructionFileGetResponse,
 } from "@getpaseo/protocol/messages";
 import type {
   ConversationHistoryBrowseRequest,
@@ -457,6 +460,7 @@ type GetProvidersSnapshotPayload = GetProvidersSnapshotResponseMessage["payload"
 type RefreshProvidersSnapshotPayload = RefreshProvidersSnapshotResponseMessage["payload"];
 type ProviderDiagnosticPayload = ProviderDiagnosticResponseMessage["payload"];
 type ProviderUsageListPayload = ProviderUsageListResponseMessage["payload"];
+type InstructionFileGetPayload = ProviderInstructionFileGetResponse["payload"];
 type DaemonStatusPayload = DaemonGetStatusResponse["payload"];
 type DaemonPairingOfferPayload = DaemonGetPairingOfferResponse["payload"];
 type DiagnosticsPayload = DiagnosticsResponse["payload"];
@@ -4770,6 +4774,48 @@ export class DaemonClient {
         type: "provider.usage.list.request",
       },
     });
+  }
+
+  async listInstructionFiles(options?: { requestId?: string }): Promise<InstructionFileListItem[]> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"provider.instruction_file.list.response">({
+        requestId: options?.requestId,
+        message: { type: "provider.instruction_file.list.request" },
+      });
+    return payload.files;
+  }
+
+  async getInstructionFile(
+    id: string,
+    options?: { requestId?: string },
+  ): Promise<InstructionFileGetPayload> {
+    return this.sendNamespacedCorrelatedSessionRequest<"provider.instruction_file.get.response">({
+      requestId: options?.requestId,
+      message: { type: "provider.instruction_file.get.request", id },
+    });
+  }
+
+  async writeInstructionFile(input: {
+    id: string;
+    text: string;
+    expectedModifiedAt?: string;
+    expectedRevision?: string;
+    requestId?: string;
+  }): Promise<InstructionFileWriteResult> {
+    const payload =
+      await this.sendNamespacedCorrelatedSessionRequest<"provider.instruction_file.write.response">(
+        {
+          requestId: input.requestId,
+          message: {
+            type: "provider.instruction_file.write.request",
+            id: input.id,
+            text: input.text,
+            expectedModifiedAt: input.expectedModifiedAt,
+            expectedRevision: input.expectedRevision,
+          },
+        },
+      );
+    return payload.result;
   }
 
   async listCommands(options: ListCommandsOptions): Promise<ListCommandsPayload>;

@@ -1457,6 +1457,68 @@ export const ProviderUsageListRequestMessageSchema = z.object({
   requestId: z.string(),
 });
 
+export const InstructionFileProviderRefSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+});
+
+export const InstructionFileListItemSchema = z.object({
+  id: z.string(),
+  filename: z.string(),
+  displayPath: z.string(),
+  missing: z.boolean(),
+  providers: z.array(InstructionFileProviderRefSchema),
+});
+
+export const InstructionFileVersionSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("present"),
+    modifiedAt: z.string(),
+    revision: z.string().optional(),
+    size: z.number().optional(),
+  }),
+  z.object({
+    status: z.literal("missing"),
+  }),
+]);
+
+export const InstructionFileWriteResultSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("written"),
+    modifiedAt: z.string(),
+    revision: z.string().optional(),
+    size: z.number().optional(),
+  }),
+  z.object({
+    status: z.literal("conflict"),
+    version: InstructionFileVersionSchema,
+  }),
+  z.object({
+    status: z.literal("error"),
+    error: z.string(),
+  }),
+]);
+
+export const ProviderInstructionFileListRequestSchema = z.object({
+  type: z.literal("provider.instruction_file.list.request"),
+  requestId: z.string(),
+});
+
+export const ProviderInstructionFileGetRequestSchema = z.object({
+  type: z.literal("provider.instruction_file.get.request"),
+  requestId: z.string(),
+  id: z.string(),
+});
+
+export const ProviderInstructionFileWriteRequestSchema = z.object({
+  type: z.literal("provider.instruction_file.write.request"),
+  requestId: z.string(),
+  id: z.string(),
+  text: z.string(),
+  expectedModifiedAt: z.string().optional(),
+  expectedRevision: z.string().optional(),
+});
+
 export const ResumeAgentRequestMessageSchema = z.object({
   type: z.literal("resume_agent_request"),
   handle: AgentPersistenceHandleSchema,
@@ -2790,6 +2852,9 @@ export const SessionInboundMessageSchema = z.discriminatedUnion("type", [
   RefreshProvidersSnapshotRequestMessageSchema,
   ProviderDiagnosticRequestMessageSchema,
   ProviderUsageListRequestMessageSchema,
+  ProviderInstructionFileListRequestSchema,
+  ProviderInstructionFileGetRequestSchema,
+  ProviderInstructionFileWriteRequestSchema,
   ResumeAgentRequestMessageSchema,
   ImportAgentRequestMessageSchema,
   RefreshAgentRequestMessageSchema,
@@ -3095,6 +3160,8 @@ export const ServerInfoStatusPayloadSchema = z
         relayConfig: z.boolean().optional(),
         // COMPAT(pushTokenRevocation): added in v0.3.2, remove gate after 2027-02-10.
         pushTokenRevocation: z.boolean().optional(),
+        // COMPAT(providerInstructionFiles): added in v0.4.0, remove gate after 2027-02-19.
+        providerInstructionFiles: z.boolean().optional(),
         // COMPAT(terminalRestoreModes): added in v0.1.81, remove gate after 2026-11-23.
         "terminal-restore-modes": z.boolean().optional(),
         // COMPAT(terminalInputModeReplay): added in v0.2.6, remove gate after 2027-02-02.
@@ -5438,6 +5505,41 @@ export const ProviderUsageListResponseMessageSchema = z.object({
   }),
 });
 
+export const ProviderInstructionFileListResponseSchema = z.object({
+  type: z.literal("provider.instruction_file.list.response"),
+  payload: z.object({
+    requestId: z.string(),
+    files: z.array(InstructionFileListItemSchema),
+  }),
+});
+
+export const ProviderInstructionFileGetResponseSchema = z.object({
+  type: z.literal("provider.instruction_file.get.response"),
+  payload: z.discriminatedUnion("status", [
+    z.object({
+      requestId: z.string(),
+      status: z.literal("ok"),
+      id: z.string(),
+      text: z.string(),
+      missing: z.boolean(),
+      version: InstructionFileVersionSchema,
+    }),
+    z.object({
+      requestId: z.string(),
+      status: z.literal("error"),
+      error: z.string(),
+    }),
+  ]),
+});
+
+export const ProviderInstructionFileWriteResponseSchema = z.object({
+  type: z.literal("provider.instruction_file.write.response"),
+  payload: z.object({
+    requestId: z.string(),
+    result: InstructionFileWriteResultSchema,
+  }),
+});
+
 const AgentSlashCommandSchema = z.object({
   name: z.string(),
   description: z.string(),
@@ -5874,6 +5976,9 @@ export const SessionOutboundMessageSchema = z.discriminatedUnion("type", [
   RefreshProvidersSnapshotResponseMessageSchema,
   ProviderDiagnosticResponseMessageSchema,
   ProviderUsageListResponseMessageSchema,
+  ProviderInstructionFileListResponseSchema,
+  ProviderInstructionFileGetResponseSchema,
+  ProviderInstructionFileWriteResponseSchema,
   ListCommandsResponseSchema,
   ListTerminalsResponseSchema,
   TerminalsChangedSchema,
@@ -6055,6 +6160,19 @@ export type ProviderUsageBalance = z.infer<typeof ProviderUsageBalanceSchema>;
 export type ProviderUsageDetail = z.infer<typeof ProviderUsageDetailSchema>;
 export type ProviderUsageListResponseMessage = z.infer<
   typeof ProviderUsageListResponseMessageSchema
+>;
+export type InstructionFileProviderRef = z.infer<typeof InstructionFileProviderRefSchema>;
+export type InstructionFileListItem = z.infer<typeof InstructionFileListItemSchema>;
+export type InstructionFileVersion = z.infer<typeof InstructionFileVersionSchema>;
+export type InstructionFileWriteResult = z.infer<typeof InstructionFileWriteResultSchema>;
+export type ProviderInstructionFileListResponse = z.infer<
+  typeof ProviderInstructionFileListResponseSchema
+>;
+export type ProviderInstructionFileGetResponse = z.infer<
+  typeof ProviderInstructionFileGetResponseSchema
+>;
+export type ProviderInstructionFileWriteResponse = z.infer<
+  typeof ProviderInstructionFileWriteResponseSchema
 >;
 export type ChatCreateResponse = z.infer<typeof ChatCreateResponseSchema>;
 export type ChatListResponse = z.infer<typeof ChatListResponseSchema>;

@@ -39,6 +39,7 @@ export function InstructionFilesSection({ serverId }: { serverId: string }) {
   const filesSupported = files.supported;
   const [editor, setEditor] = useState<EditorState | null>(null);
   const savingRef = useRef(false);
+  const openGenerationRef = useRef(0);
   useFocusEffect(
     useCallback(() => {
       if (filesConnected && filesSupported) void refreshFiles();
@@ -55,11 +56,13 @@ export function InstructionFilesSection({ serverId }: { serverId: string }) {
 
   const handleClose = useCallback(() => {
     if (closeBlocked) return;
+    openGenerationRef.current += 1;
     setEditor(null);
   }, [closeBlocked]);
 
   const handleOpen = useCallback(
     async (file: InstructionFileListItem) => {
+      const generation = ++openGenerationRef.current;
       savingRef.current = false;
       setEditor({
         file,
@@ -74,6 +77,7 @@ export function InstructionFilesSection({ serverId }: { serverId: string }) {
       });
       try {
         const result = await getFile(file.id);
+        if (openGenerationRef.current !== generation) return;
         if (result.status === "error") {
           setEditor({
             file,
@@ -100,6 +104,7 @@ export function InstructionFilesSection({ serverId }: { serverId: string }) {
           loading: false,
         });
       } catch (error) {
+        if (openGenerationRef.current !== generation) return;
         setEditor({
           file,
           draft: "",
@@ -124,9 +129,7 @@ export function InstructionFilesSection({ serverId }: { serverId: string }) {
 
   const handleReset = useCallback(() => {
     setEditor((current) =>
-      current && !current.saving
-        ? { ...current, draft: current.loadedText, saveError: null }
-        : current,
+      current && !current.saving ? { ...current, draft: current.loadedText } : current,
     );
   }, []);
 
@@ -226,20 +229,12 @@ export function InstructionFilesSection({ serverId }: { serverId: string }) {
               description={files.error.message}
             />
           ) : null}
-          {files.files.length === 0 && !files.error ? (
-            <View style={styles.emptyCard}>
-              <Text style={styles.mutedText}>{t("settings.host.instructionFiles.empty")}</Text>
-            </View>
-          ) : (
-            files.files.map((file, index) => (
-              <InstructionFileRow
-                key={file.id}
-                file={file}
-                isFirst={index === 0}
-                onOpen={handleOpen}
-              />
-            ))
-          )}
+          <InstructionFilesList
+            files={files.files}
+            isLoading={files.isLoading}
+            error={files.error}
+            onOpen={handleOpen}
+          />
         </View>
       </SettingsSection>
 
@@ -330,6 +325,42 @@ export function InstructionFilesSection({ serverId }: { serverId: string }) {
           </View>
         </AdaptiveModalSheet>
       ) : null}
+    </>
+  );
+}
+
+function InstructionFilesList({
+  files,
+  isLoading,
+  error,
+  onOpen,
+}: {
+  files: InstructionFileListItem[];
+  isLoading: boolean;
+  error: Error | null;
+  onOpen: (file: InstructionFileListItem) => void | Promise<void>;
+}) {
+  const { t } = useTranslation();
+  if (error) return null;
+  if (isLoading && files.length === 0) {
+    return (
+      <View style={styles.emptyCard} testID="host-instruction-files-loading">
+        <Text style={styles.mutedText}>{t("common.loading")}</Text>
+      </View>
+    );
+  }
+  if (files.length === 0) {
+    return (
+      <View style={styles.emptyCard}>
+        <Text style={styles.mutedText}>{t("settings.host.instructionFiles.empty")}</Text>
+      </View>
+    );
+  }
+  return (
+    <>
+      {files.map((file, index) => (
+        <InstructionFileRow key={file.id} file={file} isFirst={index === 0} onOpen={onOpen} />
+      ))}
     </>
   );
 }

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -159,6 +159,71 @@ describe("provider.instruction_file catalog", () => {
       missing: false,
       providers: [{ id: "codex", label: "Codex" }],
     });
+  });
+
+  it("follows a symlink for list, get, and write without replacing the link", async () => {
+    const harness = await startHarness();
+    const target = path.join(harness.root, "tracked", "CLAUDE.md");
+    await mkdir(path.dirname(target), { recursive: true });
+    await writeFile(target, "from tracked file\n", "utf8");
+    await symlink(target, path.join(harness.claudeDir, "CLAUDE.md"));
+
+    const listed = await harness.client.listInstructionFiles();
+    const claude = listed.find((file) => file.filename === "CLAUDE.md");
+    expect(claude).toMatchObject({ missing: false, filename: "CLAUDE.md" });
+    if (!claude) throw new Error("expected CLAUDE.md catalog row");
+    const loaded = await harness.client.getInstructionFile(claude.id);
+    expect(loaded).toMatchObject({
+      status: "ok",
+      text: "from tracked file\n",
+      missing: false,
+    });
+    if (loaded.status !== "ok" || loaded.version.status !== "present") {
+      throw new Error("expected present symlink target");
+    }
+
+    const written = await harness.client.writeInstructionFile({
+      id: claude.id,
+      text: "edited through symlink\n",
+      expectedModifiedAt: loaded.version.modifiedAt,
+      expectedRevision: loaded.version.revision,
+    });
+    expect(written).toMatchObject({ status: "written" });
+    expect(await readFile(target, "utf8")).toBe("edited through symlink\n");
+    expect((await lstat(path.join(harness.claudeDir, "CLAUDE.md"))).isSymbolicLink()).toBe(true);
+    expect(
+      (await harness.client.listInstructionFiles()).find((file) => file.id === claude.id),
+    ).toMatchObject({ missing: false });
+  });
+
+  it("creates a dangling symlink target without replacing the link", async () => {
+    const harness = await startHarness();
+    const target = path.join(harness.root, "tracked", "CLAUDE.md");
+    await mkdir(path.dirname(target), { recursive: true });
+    await symlink(target, path.join(harness.claudeDir, "CLAUDE.md"));
+
+    const listed = await harness.client.listInstructionFiles();
+    const claude = listed.find((file) => file.filename === "CLAUDE.md");
+    expect(claude).toMatchObject({ missing: true, filename: "CLAUDE.md" });
+    if (!claude) throw new Error("expected CLAUDE.md catalog row");
+    const loaded = await harness.client.getInstructionFile(claude.id);
+    expect(loaded).toMatchObject({
+      status: "ok",
+      text: "",
+      missing: true,
+      version: { status: "missing" },
+    });
+
+    const written = await harness.client.writeInstructionFile({
+      id: claude.id,
+      text: "created at dangling target\n",
+    });
+    expect(written).toMatchObject({ status: "written" });
+    expect(await readFile(target, "utf8")).toBe("created at dangling target\n");
+    expect((await lstat(path.join(harness.claudeDir, "CLAUDE.md"))).isSymbolicLink()).toBe(true);
+    expect(
+      (await harness.client.listInstructionFiles()).find((file) => file.id === claude.id),
+    ).toMatchObject({ missing: false });
   });
 
   it("gets present and missing bodies and rejects oversize, non-text, and unknown ids", async () => {

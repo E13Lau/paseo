@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
-import { constants, type BigIntStats } from "node:fs";
+import type { BigIntStats } from "node:fs";
 import type { FileHandle } from "node:fs/promises";
-import { mkdir, open, rename, stat, unlink } from "node:fs/promises";
+import { lstat, mkdir, open, readlink, realpath, rename, stat, unlink } from "node:fs/promises";
 import path from "node:path";
 import type {
   InstructionFileListItem,
@@ -33,9 +33,6 @@ export interface InstructionFileWriteInput {
   expectedModifiedAt?: string;
   expectedRevision?: string;
 }
-
-const READ_FLAGS =
-  process.platform === "win32" ? constants.O_RDONLY : constants.O_RDONLY | constants.O_NOFOLLOW;
 
 export class InstructionFileService {
   constructor(private readonly providerSnapshotManager: ProviderSnapshotManager) {}
@@ -95,7 +92,7 @@ async function readInstructionFile(
 ): Promise<InstructionFileGetOutcome> {
   let handle: FileHandle | null = null;
   try {
-    handle = await open(file.absolutePath, READ_FLAGS);
+    handle = await open(file.absolutePath, "r");
     const stats = await handle.stat({ bigint: true });
     if (!stats.isFile()) {
       return { status: "error", error: "Requested path is not a file" };
@@ -137,8 +134,10 @@ async function writeInstructionFile(
 ): Promise<InstructionFileWriteResult> {
   const expectedMissing = input.expectedModifiedAt == null && input.expectedRevision == null;
   let currentMode = 0o600;
+  let writePath = file.absolutePath;
   try {
-    const stats = await stat(file.absolutePath, { bigint: true });
+    writePath = await realpath(file.absolutePath);
+    const stats = await stat(writePath, { bigint: true });
     if (!stats.isFile()) {
       return { status: "error", error: "Requested path is not a file" };
     }
@@ -156,12 +155,13 @@ async function writeInstructionFile(
     if (!expectedMissing) {
       return { status: "conflict", version: { status: "missing" } };
     }
+    writePath = await resolveMissingCreatePath(file.absolutePath);
   }
 
-  await mkdir(path.dirname(file.absolutePath), { recursive: true });
+  await mkdir(path.dirname(writePath), { recursive: true });
   const temporaryPath = path.join(
-    path.dirname(file.absolutePath),
-    `.${path.basename(file.absolutePath)}.paseo-${randomUUID()}.tmp`,
+    path.dirname(writePath),
+    `.${path.basename(writePath)}.paseo-${randomUUID()}.tmp`,
   );
   let temporaryHandle: FileHandle | null = null;
   try {
@@ -174,7 +174,7 @@ async function writeInstructionFile(
     await temporaryHandle.close();
     temporaryHandle = null;
     try {
-      const latestStats = await stat(file.absolutePath, { bigint: true });
+      const latestStats = await stat(writePath, { bigint: true });
       if (expectedMissing) {
         return { status: "conflict", version: presentVersion(latestStats) };
       }
@@ -189,8 +189,8 @@ async function writeInstructionFile(
         return { status: "conflict", version: { status: "missing" } };
       }
     }
-    await rename(temporaryPath, file.absolutePath);
-    const written = await stat(file.absolutePath, { bigint: true });
+    await rename(temporaryPath, writePath);
+    const written = await stat(writePath, { bigint: true });
     return {
       status: "written",
       modifiedAt: written.mtime.toISOString(),
@@ -232,6 +232,17 @@ function matchesExpectedRevision(
 
 function isMissingEntryError(error: unknown): boolean {
   return Boolean(error && typeof error === "object" && "code" in error && error.code === "ENOENT");
+}
+
+async function resolveMissingCreatePath(catalogPath: string): Promise<string> {
+  try {
+    const stats = await lstat(catalogPath);
+    if (!stats.isSymbolicLink()) return catalogPath;
+    return path.resolve(path.dirname(catalogPath), await readlink(catalogPath));
+  } catch (error) {
+    if (isMissingEntryError(error)) return catalogPath;
+    throw error;
+  }
 }
 
 function isLikelyBinary(buffer: Buffer): boolean {

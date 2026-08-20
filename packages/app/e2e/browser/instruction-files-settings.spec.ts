@@ -49,6 +49,9 @@ test.describe("Host instruction files", () => {
     await page.getByTestId("host-instruction-files-save").click();
     await expect(page.getByTestId("host-instruction-files-save-error")).toBeVisible();
     await expect(page.getByText("disk is read-only")).toBeVisible();
+    await page.getByTestId("host-instruction-files-reset").click();
+    await expect(page.getByTestId("host-instruction-files-input")).toHaveValue("");
+    await expect(page.getByTestId("host-instruction-files-save-error")).toBeVisible();
     await expect(page.getByTestId("host-instruction-files-sheet")).toBeVisible();
   });
 
